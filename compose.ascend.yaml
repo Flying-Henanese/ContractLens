@@ -1,0 +1,72 @@
+services:
+  paddleocr-vlm-server:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:${ASCEND_VLM_IMAGE_TAG:-latest-huawei-npu}
+    container_name: paddleocr-vlm-server-ascend
+    user: root
+    init: true
+    privileged: true
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${VLM_NPU_IDS:-1,2}
+      VLM_MODEL: ${VLM_MODEL:-PaddleOCR-VL-1.6-0.9B}
+      VLM_DATA_PARALLEL_SIZE: ${VLM_DATA_PARALLEL_SIZE:-2}
+      VLM_DATA_PARALLEL_BACKEND: ${VLM_DATA_PARALLEL_BACKEND:-mp}
+      VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.8}
+      VLM_MAX_NUM_SEQS: ${VLM_MAX_NUM_SEQS:-16}
+      VLM_MAX_NUM_BATCHED_TOKENS: ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
+    command:
+      - /bin/bash
+      - /opt/paddleocr-server/vlm-entrypoint-ascend.sh
+    volumes:
+      - ./vllm_config.yaml:/opt/paddleocr-server/vllm_config.yaml:ro
+      - ./docker/vlm-entrypoint-ascend.sh:/opt/paddleocr-server/vlm-entrypoint-ascend.sh:ro
+      - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver
+      - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
+      - /usr/local/dcmi:/usr/local/dcmi
+    shm_size: 64gb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8118/v1/models >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: ${STARTUP_TIMEOUT:-900}s
+
+  paddleocr-vl-api:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-vl:${ASCEND_API_IMAGE_TAG:-latest-huawei-npu}
+    container_name: paddleocr-vl-api-ascend
+    user: root
+    init: true
+    privileged: true
+    depends_on:
+      paddleocr-vlm-server:
+        condition: service_healthy
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${PIPELINE_NPU_ID:-0}
+    command:
+      - paddlex
+      - --serve
+      - --pipeline
+      - /opt/paddleocr-server/PaddleOCR-VL-1.6.yaml
+      - --device
+      - npu:0
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    ports:
+      - "${API_PORT:-8880}:8080"
+    volumes:
+      - ./PaddleOCR-VL-1.6.yaml:/opt/paddleocr-server/PaddleOCR-VL-1.6.yaml:ro
+      - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver
+      - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
+      - /usr/local/dcmi:/usr/local/dcmi
+    shm_size: 64gb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
