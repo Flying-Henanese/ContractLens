@@ -5,6 +5,8 @@ services:
     # 与 PaddleOCR 官方 Compose 保持一致，避免模型缓存和设备权限问题。
     user: root
     init: true
+    ports:
+      - "8118:8118"
     environment:
       CUDA_VISIBLE_DEVICES: ${VLM_GPU_IDS:-5,6}
       VLM_MODEL: ${VLM_MODEL:-PaddleOCR-VL-1.6-0.9B}
@@ -13,6 +15,12 @@ services:
       VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.8}
       VLM_MAX_NUM_SEQS: ${VLM_MAX_NUM_SEQS:-16}
       VLM_MAX_NUM_BATCHED_TOKENS: ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
+      # NCCL 配置，避免在多 GPU 时出现问题
+      NCCL_DEBUG: INFO
+      NCCL_P2P_DISABLE: "1"
+      NCCL_IB_DISABLE: "1"
+
+      
     command:
       - /bin/bash
       - /opt/paddleocr-server/vlm-entrypoint.sh
