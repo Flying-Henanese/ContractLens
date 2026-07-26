@@ -17,8 +17,9 @@ Docker Compose 组织高并发处理链路。
 主链路为：
 
 1. 单个 PaddleOCR API/Pipeline 接收文档请求。
-2. 前道 PP-DocLayoutV3 执行文档预处理、版面分析和子图裁剪。
-3. Pipeline 将大量版面子图并发提交给后端 vLLM 服务。
+2. CV 阶段执行文档预处理和 PP-DocLayoutV3 版面分析，并收集版面框。
+3. VLM 准备阶段使用 CPU worker 裁剪、合并和过滤版面块，再将大量版面子图
+   并发提交给后端 vLLM 服务。
 4. vLLM 通过多个 PaddleOCR-VL-1.6-0.9B 模型实例和实例内连续批处理并行消费请求。
 5. Pipeline 重组识别结果，并通过 `/layout-parsing` 返回。
 
@@ -34,10 +35,9 @@ Serve 或手工维护多个 VLM 地址。
 - 保持现有“单前道、后端多实例”的双服务架构：
   - 一个 `paddleocr-vl-api` 负责 API、预处理、PP-DocLayoutV3、子图分发和结果重组。
   - 一个 `paddleocr-vlm-server` 入口管理多个 PaddleOCR-VL 完整模型实例，并负责调度和连续批处理。
-- 高并发能力依赖三层协同，不要只调整其中一个参数就宣称完成优化：
-  - Pipeline 的版面子图并发：`max_concurrency`。
-  - vLLM 单实例调度/连续批处理：`max-num-seqs`、`max-num-batched-tokens`。
-  - vLLM 横向模型实例数：`data-parallel-size`。
+- 高并发能力依赖 Pipeline 内部流水线、CPU 准备、版面子任务扇出、vLLM
+  连续批处理和模型实例扩展协同工作。涉及并发或性能时，先阅读
+  `.harness/context/concurrency-model.md`。
 - 不要把 Pipeline GPU/NPU 与 VLM GPU/NPU 分配到同一张物理设备。
 - `VLM_GPU_IDS` 或 `VLM_NPU_IDS` 中的设备数量必须与 `VLM_DATA_PARALLEL_SIZE` 一致。
 - 除非用户明确要求，不要升级镜像、PaddlePaddle、PaddleOCR、PaddleX、vLLM、Torch、Transformers 或其他推理依赖。
@@ -79,7 +79,6 @@ Serve 或手工维护多个 VLM 地址。
 
 - CUDA 设备通过 `CUDA_VISIBLE_DEVICES` 暴露。
 - 容器内设备编号会重新映射，因此 Pipeline 使用 `gpu:0` 是预期行为。
-- `tensor-parallel-size: 1` 表示每个 VLM 数据并行模型实例使用一张卡。
 - 修改 NCCL 配置前，应考虑目标机器的 GPU 拓扑、P2P 和 IB 环境。
 
 ### 华为昇腾
@@ -87,7 +86,6 @@ Serve 或手工维护多个 VLM 地址。
 - 昇腾设备通过 `ASCEND_RT_VISIBLE_DEVICES` 暴露。
 - 容器内设备编号会重新映射，因此 Pipeline 使用 `npu:0` 是预期行为。
 - 保留宿主机 Ascend driver、`npu-smi` 和 DCMI 的挂载，除非已有目标环境验证。
-- `gpu-memory-utilization` 是 vLLM 沿用的参数名，在昇腾环境中表示 NPU HBM 使用比例。
 - 昇腾相关修改必须同步检查 `ASCEND.md`、`.env.ascend.example` 和 `compose.ascend.yaml`。
 
 ## 验证要求
@@ -165,13 +163,11 @@ python scripts/benchmark.py ./demo.pdf \
   实例持续有任务可处理。
 - 数据并行只直接扩展 VLM 识别阶段。单个 PP-DocLayout/API 前道服务、文档
   预处理、结果重组或 API 请求调度都可能成为端到端瓶颈。
-- 调优时联合观察：
-  - `VLRecognition.genai_config.max_concurrency`
-  - `max-num-seqs`
-  - `max-num-batched-tokens`
-  - `gpu-memory-utilization`
-  - `data-parallel-size`
+- 调优时联合观察 Pipeline 内部队列、前道 CPU、版面分析设备、版面子任务扇出、
+  vLLM 调度和各模型实例的资源利用率。具体参数见 `.harness/context/`。
 - OOM 时优先降低显存/HBM 使用率、并发序列数、批处理 token 数或请求并发。
+- 前道 CPU 饱和、版面块准备积压或 VLM 等待输入时，应先定位具体阶段，
+  而不是只提高 VLM 并发。
 - 性能结论必须来自单实例与多实例、不同外层文档并发的对照压测，并结合
   GPU/NPU 利用率、错误率、端到端吞吐和尾延迟判断。
 - 如果 VLM 设备利用率不足，先判断前道是否能持续生成足够多的子图任务。

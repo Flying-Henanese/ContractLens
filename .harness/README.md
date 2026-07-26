@@ -31,3 +31,7 @@
 
 涉及并发、吞吐、扩容或设备利用率的任务，必须阅读
 `context/concurrency-model.md`。
+
+涉及 Pipeline 模块、版面阈值、功能开关或输出行为时，阅读
+`context/pipeline-configuration.md`；涉及 vLLM 引擎、数据并行、调度、显存
+或缓存时，阅读 `context/vllm-configuration.md`。

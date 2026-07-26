@@ -7,8 +7,8 @@
 - Compose 服务名：`paddleocr-vl-api`
 - 对外默认端口：`8880`
 - 容器内端口：`8080`
-- 是单个前道服务，负责 API、文档预处理、PP-DocLayoutV3、裁剪、子任务扇出
-  和结果重组。
+- 是单个前道服务，负责 API、文档预处理、PP-DocLayoutV3、版面框收集、版面块
+  准备、子任务扇出和结果重组。
 - CUDA 使用独立 Pipeline GPU；昇腾使用独立 Pipeline NPU。
 
 ### VLM Server
@@ -24,8 +24,9 @@
 
 1. 客户端向 `/layout-parsing` 提交 Base64 文件和文件类型。
 2. Pipeline 执行文档方向、展平等预处理。
-3. PP-DocLayoutV3 识别版面区域。
-4. Pipeline 根据版面结果裁剪子图。
+3. PP-DocLayoutV3 识别版面区域并收集版面框。
+4. VLM 准备阶段使用 `layout_prep_cpu_workers` 并行裁剪、合并和过滤版面块，
+   并构造 VLM 请求。
 5. `VLRecognition` 以 `max_concurrency` 将版面子任务扇出到 VLM Server。
 6. vLLM 对请求执行连续批处理，并将其调度给多个数据并行模型实例。
 7. Pipeline 重组页面和版面结果并返回响应。
@@ -53,6 +54,9 @@
 - `start_vl.sh` 会生成运行时 Pipeline 配置，将地址替换为
   `127.0.0.1:8118/v1`。
 - `vllm_config.yaml` 是模板；入口脚本根据环境变量生成运行时配置。
+- `use_queues: True` 使输入、CV 和 VLM 阶段通过内部队列重叠执行。
+- `layout_prep_cpu_workers: 16` 控制 VLM 请求前的版面块 CPU 准备并发，不控制
+  vLLM 模型实例数。
 
 ## 风险边界
 

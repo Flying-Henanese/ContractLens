@@ -19,6 +19,11 @@
 处理拆成内部队列流水线，使不同阶段可以重叠执行。详细设计见
 `../designs/2026-07-25-use-queues-pipeline.md`。
 
+CV 阶段完成 PP-DocLayoutV3 和版面框收集后，VLM 准备阶段通过
+`layout_prep_cpu_workers: 16` 并行裁剪、合并和过滤版面块，并构造 VLM 请求。
+这是 VLM 请求发出前的 CPU 并发层，不属于 PP-DocLayoutV3 推理，也不控制后端
+模型实例数。
+
 ### 1. 文档请求并发
 
 多个 PDF/图片请求同时进入 `/layout-parsing`。它决定系统是否有足够多的文档
@@ -51,6 +56,7 @@ PP-DocLayoutV3 将页面拆成文本、表格、公式、图片等版面区域�
 
 - 外层有足够的并发文档、页面或版面区域。
 - 单个前道 PP-DocLayout/API 服务能持续产生子任务。
+- `layout_prep_cpu_workers` 与前道可用 CPU 核数匹配，能及时完成版面块准备。
 - `max_concurrency` 足以将请求送入 vLLM。
 - vLLM 调度参数足以形成有效批处理。
 - 各模型实例有独立且足够的 GPU/NPU 显存或 HBM。
@@ -64,6 +70,8 @@ PP-DocLayoutV3 将页面拆成文本、表格、公式、图片等版面区域�
 
 - 检查外层文档并发是否过低。
 - 检查每份文档产生的版面子图数量。
+- 检查版面块 CPU 准备是否积压，以及 `layout_prep_cpu_workers` 是否与可用
+  CPU 资源匹配。
 - 检查 `max_concurrency` 是否限制扇出。
 - 检查单个前道是否在预处理或 PP-DocLayout 阶段饱和。
 
@@ -77,6 +85,7 @@ PP-DocLayoutV3 将页面拆成文本、表格、公式、图片等版面区域�
 
 - 检查单个前道服务是否已经饱和。
 - 检查请求是否包含足够子任务。
+- 检查版面块裁剪、合并、过滤和请求构造是否成为 CPU 瓶颈。
 - 检查所有 DP rank 是否实际收到负载。
 - 检查结果重组、编码或网络传输是否成为瓶颈。
 
@@ -85,6 +94,8 @@ PP-DocLayoutV3 将页面拆成文本、表格、公式、图片等版面区域�
 - 降低 `gpu-memory-utilization`。
 - 降低 `max-num-seqs` 或 `max-num-batched-tokens`。
 - 降低 Pipeline 子任务并发或外层文档并发。
+- 如果前道内存压力来自大量并行版面块准备，评估降低
+  `layout_prep_cpu_workers`。
 - 分别观察前道设备和 VLM 设备，不要混为同一资源池。
 
 ## 性能结论要求
@@ -94,8 +105,9 @@ PP-DocLayoutV3 将页面拆成文本、表格、公式、图片等版面区域�
 - 平台、设备型号和设备数量。
 - VLM 模型实例数。
 - 外层请求并发、请求数和输入页数。
-- `max_concurrency`、`max-num-seqs`、`max-num-batched-tokens`。
+- `use_queues`、`layout_prep_cpu_workers`、`max_concurrency`、
+  `max-num-seqs`、`max-num-batched-tokens`。
 - 成功率、错误类型、平均延迟、p50、p95、请求/秒和页/秒。
-- 前道及每个 VLM 设备的利用率与显存/HBM。
+- 前道 CPU、前道 GPU/NPU 及每个 VLM 设备的利用率与内存/显存/HBM。
 
 用单实例/多实例和低并发/高并发形成对照，不从单次结果推导扩展效率。

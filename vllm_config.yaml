@@ -3,31 +3,31 @@
 # PaddleOCR-VL-1.6 的 vLLM 后端配置。
 # 此文件只配置 vLLM 推理引擎，不包含版面检测或完整 OCR 流水线配置。
 
-# PaddleOCR-VL-1.6-0.9B 可以单卡运行，每个数据并行副本使用 1 张 GPU。
+# 每个完整模型实例使用 1 张可见 GPU/NPU，不在单实例内部切分模型。
 tensor-parallel-size: 1
 
-# 在多张 GPU 上分别加载完整模型副本，由一个 API Server 调度请求。
+# 默认在 2 张设备上分别加载完整模型实例，由一个 API Server 统一调度请求。
 data-parallel-size: 2
 
-# 单机多卡优先使用原生多进程，不需要 Ray 或 Ray Serve。
+# 单机多设备使用原生多进程管理数据并行实例，不需要 Ray 或 Ray Serve。
 data-parallel-backend: mp
 
-# 每个副本可使用的显存比例。VLM GPU 与 PP-DocLayoutV3 GPU 分离。
+# 每个实例可使用的显存/HBM 比例；VLM 设备与 PP-DocLayoutV3 设备应分离。
 gpu-memory-utilization: 0.8
 
-# 每个数据并行副本同时调度的最大序列数。
+# 每个数据并行模型实例同时调度的最大序列数。
 max-num-seqs: 16
 
 # 每轮调度允许批处理的最大 token 数。
 max-num-batched-tokens: 16384
 
-# OCR 图片请求通常很难受益于前缀缓存。
+# OCR 图片请求通常很难受益于前缀缓存，因此显式关闭。
 no-enable-prefix-caching: true
 
-# 避免多模态预处理器缓存持续占用内存。
+# 将多模态预处理器缓存设为 0 GiB，避免持续占用内存。
 mm-processor-cache-gb: 0
 
-# PaddleOCR-VL 需要加载模型仓库中的自定义实现。
+# 允许加载 PaddleOCR-VL 模型仓库提供的自定义实现。
 trust-remote-code: true
 
 # 默认保留 CUDA Graph 优化。如果遇到显存或 CUDA Graph 问题再启用。

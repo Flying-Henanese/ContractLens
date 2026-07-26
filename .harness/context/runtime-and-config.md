@@ -50,7 +50,11 @@ CUDA：
 2. Compose 将参数传入容器并声明设备、挂载和健康检查。
 3. VLM entrypoint 校验设备数量和并行模型实例数。
 4. entrypoint 以 `vllm_config.yaml` 为模板生成临时配置。
-5. `PaddleOCR-VL-1.6.yaml` 定义 Pipeline 模块和 VLM 服务地址。
+5. `PaddleOCR-VL-1.6.yaml` 定义 Pipeline 模块、VLM 服务地址和 Pipeline 顶层
+   并发参数：
+   - `use_queues: True`：启用输入、CV、VLM 阶段之间的内部队列流水线。
+   - `layout_prep_cpu_workers: 16`：并行完成版面块裁剪、合并、过滤及 VLM
+     请求准备。
 
 不要把生成的临时配置反向写回模板。
 

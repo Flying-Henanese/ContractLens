@@ -12,9 +12,13 @@ use_queues: True
 layout_prep_cpu_workers: 16
 ```
 
-这个参数用于开启 PaddleOCR-VL Pipeline 内部的队列化流水线，使输入、CV 和
-VLM 三个阶段通过队列传递中间结果。它解决的是单个 Pipeline 内不同处理阶段
-之间的重叠执行问题。
+`use_queues` 用于开启 PaddleOCR-VL Pipeline 内部的队列化流水线，使输入、CV
+和 VLM 三个阶段通过队列传递中间结果。它解决的是单个 Pipeline 内不同处理
+阶段之间的重叠执行问题。
+
+`layout_prep_cpu_workers` 控制 VLM 请求发出前的 CPU 准备并发，包括版面块
+裁剪、合并、过滤和请求构造。它不控制 PP-DocLayoutV3 推理线程数，也不控制
+后端 vLLM 模型实例数。
 
 ## 阶段与队列
 
@@ -61,8 +65,8 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 按照 `VLRecognition.genai_config.max_concurrency` 并发请求后端。
 
 `layout_prep_cpu_workers: 16` 配置在 Pipeline YAML 顶层，用 16 个 CPU 工作
-线程并行完成版面块裁剪、合并及 VLM 请求准备。它属于 VLM 请求前的 CPU
-准备阶段，不控制后端 vLLM 模型实例数。
+线程并行完成版面块裁剪、合并、过滤及 VLM 请求准备。它属于 VLM 请求前的
+CPU 准备阶段，不控制后端 vLLM 模型实例数。
 
 当前后端是单一 vLLM API 入口，入口后由多个数据并行模型实例处理请求。VLM
 线程等待当前微批次中的版面块全部完成，再聚合为页面结构化结果并送入
@@ -76,6 +80,7 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 | 机制 | 控制范围 | 主要作用 |
 | --- | --- | --- |
 | `use_queues` | 单个 Pipeline 内部 | 让输入、CV、VLM 阶段重叠执行 |
+| `layout_prep_cpu_workers` | VLM 请求前的 CPU 准备阶段 | 并行裁剪、合并、过滤版面块并构造请求 |
 | 外层请求并发 | `/layout-parsing` 请求 | 同时提供多份文档任务 |
 | `max_concurrency` | Pipeline 到 VLM | 控制同时发出的版面块请求数 |
 | `max-num-seqs` | 单个 vLLM 模型实例 | 控制实例内同时调度的序列数 |
@@ -85,9 +90,10 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 因此：
 
 - `use_queues: True` 不会自动增加 vLLM 模型实例数。
-- 它不等同于 HTTP 服务可以无限并发处理请求。
-- 它不会消除单个 PP-DocLayout/CV 阶段的计算上限。
-- 它能减少各阶段相互等待，使输入、版面分析和 VLM 推理形成流水线。
+- `layout_prep_cpu_workers` 不会增加 PP-DocLayoutV3 或 vLLM 模型实例数。
+- `use_queues` 不等同于 HTTP 服务可以无限并发处理请求。
+- `use_queues` 不会消除单个 PP-DocLayout/CV 阶段的计算上限。
+- `use_queues` 能减少各阶段相互等待，使输入、版面分析和 VLM 推理形成流水线。
 - 后端 VLM 是否能被充分利用，仍取决于文档量、版面块数量、
   `max_concurrency` 和 vLLM 调度能力。
 
@@ -110,6 +116,8 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 
 - 输入阶段是否持续产生页面。
 - CV/PP-DocLayout 阶段是否已经饱和。
+- `layout_prep_cpu_workers` 是否与前道可用 CPU 核数匹配。
+- 版面块裁剪、合并、过滤及请求准备是否积压。
 - 文档是否产生足够多的版面块。
 - `max_concurrency` 是否过低。
 
@@ -120,7 +128,7 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 
 - PDF 拆页或图片加载。
 - 文档预处理或 PP-DocLayoutV3。
-- 版面块裁剪及结果聚合。
+- 版面块裁剪、合并、过滤、请求构造及结果聚合。
 - vLLM 排队或模型推理。
 
 ### 延迟和内存上升
@@ -129,6 +137,7 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 超时或尾延迟显著上升时，应联合降低：
 
 - 外层文档请求并发。
+- `layout_prep_cpu_workers`。
 - `VLRecognition.genai_config.max_concurrency`。
 - vLLM 的 `max-num-seqs`。
 - vLLM 的 `max-num-batched-tokens`。
@@ -144,4 +153,5 @@ VLM 线程从 `queue_cv` 消费结果，裁剪、合并和过滤版面块，构�
 - 表格、公式、图片、印章等版面块没有丢失或串页。
 - 并发请求下无队列阻塞、死锁或长期不返回。
 - 对比开启与关闭时的请求吞吐、页吞吐、p95 延迟和内存占用。
-- 观察前道设备和所有 VLM 设备的实际利用率。
+- 记录 `layout_prep_cpu_workers`、前道可用 CPU 核数和 CPU 利用率。
+- 观察前道 CPU、前道 GPU/NPU 和所有 VLM 设备的实际利用率。

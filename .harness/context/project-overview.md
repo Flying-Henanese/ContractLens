@@ -29,6 +29,8 @@
 - `compose.ascend.yaml`：昇腾双服务部署。
 - `PaddleOCR-VL-1.6.yaml`：Pipeline 拓扑和并发配置。
 - `vllm_config.yaml`：vLLM 数据并行及调度配置。
+- `pipeline-configuration.md`：Pipeline 模块、阈值、功能开关和输出配置说明。
+- `vllm-configuration.md`：vLLM 并行、调度、缓存和运行时覆盖说明。
 - `.env.example`：CUDA 示例参数。
 - `.env.ascend.example`：昇腾示例参数。
 - `docker/vlm-entrypoint.sh`：CUDA VLM 容器入口。
