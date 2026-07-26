@@ -3,7 +3,11 @@ pipeline_name: PaddleOCR-VL-1.6
 
 batch_size: 64
 
+# 启用输入、CV 和 VLM 阶段之间的队列流水线，使各阶段可重叠执行。
 use_queues: True
+
+# 版面块裁剪、合并和 VLM 请求准备使用的 CPU 工作线程数。
+layout_prep_cpu_workers: 16
 
 use_doc_preprocessor: True
 use_layout_detection: True
