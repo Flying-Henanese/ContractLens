@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 pdf-parser = "pdf_parser.cli:app"
+pdf-parser-api = "pdf_parser.main:main"
 
 [build-system]
 requires = ["uv_build>=0.11.17,<0.12.0"]

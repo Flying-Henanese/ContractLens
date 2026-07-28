@@ -3,7 +3,14 @@
 启动可接受外部请求的 FastAPI 服务：
 
 ```powershell
-uv run uvicorn pdf_parser.api:app --host 0.0.0.0 --port 8000
+uv run pdf-parser-api
+```
+
+该入口默认监听 `0.0.0.0:8888`。也可以通过 Python 模块或 Uvicorn 启动：
+
+```powershell
+uv run python -m pdf_parser.main
+uv run uvicorn pdf_parser.main:app --host 0.0.0.0 --port 8888
 ```
 
 服务提供两个同步请求接口（客户端需要等待接口返回）：
@@ -16,15 +23,15 @@ uv run uvicorn pdf_parser.api:app --host 0.0.0.0 --port 8000
 文档解析示例：
 
 ```powershell
-curl.exe -X POST "http://127.0.0.1:8000/api/v1/documents/parse" `
+curl.exe -X POST "http://127.0.0.1:8888/api/v1/documents/parse" `
   -F "file=@input.pdf;type=application/pdf"
 ```
 
 票据接口示例：
 
 ```powershell
-curl.exe -X POST "http://127.0.0.1:8000/api/v1/receipts/recognize" `
+curl.exe -X POST "http://127.0.0.1:8888/api/v1/receipts/recognize" `
   -F "file=@receipt.jpg;type=image/jpeg"
 ```
 
-交互式接口文档位于 `http://127.0.0.1:8000/docs`。
+交互式接口文档位于 `http://127.0.0.1:8888/docs`。

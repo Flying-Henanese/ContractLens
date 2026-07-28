@@ -57,7 +57,14 @@ uv run pdf-parser parse input.pdf -o output\result.json
 uv run pdf-parser parse input.pdf --concurrency 2
 ```
 
-也支持环境变量：
+也支持 `.env` 文件或环境变量。可以先复制模板，再按实际远端
+PaddleOCR-VL / PaddleX 服务地址修改 `PDF_PARSER_ENDPOINT`：
+
+```powershell
+Copy-Item .env.template .env
+```
+
+也可以在当前 PowerShell 会话中直接设置：
 
 ```powershell
 $env:PDF_PARSER_ENDPOINT = "http://192.168.0.194:8080"
