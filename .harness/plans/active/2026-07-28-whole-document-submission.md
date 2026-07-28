@@ -1,3 +1,18 @@
+---
+status: active
+owner: Codex
+created: 2026-07-28
+updated: 2026-07-28
+scope:
+  - ingestion
+  - client
+  - service
+  - cli
+supersedes:
+  - per-page-submission
+  - bounded-page-concurrency
+blocked_by: []
+---
 # 整份 PDF 远端提交
 
 状态：active  

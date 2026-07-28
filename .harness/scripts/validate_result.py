@@ -5,14 +5,18 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
 
-class ValidationError(ValueError):
+from pdf_parser.models import ParseResponse
+
+
+class ContractValidationError(ValueError):
     """The normalized parser result violates the public output contract."""
 
 
 def _expect(condition: bool, message: str) -> None:
     if not condition:
-        raise ValidationError(message)
+        raise ContractValidationError(message)
 
 
 def _validate_bbox(value: Any, width: int, height: int, path: str) -> None:
@@ -125,6 +129,23 @@ def _validate_page(page: Any, page_index: int) -> int:
 
 def validate(payload: Any) -> None:
     _expect(isinstance(payload, dict), "top-level JSON must be an object")
+    _expect(
+        all(key in payload for key in ("code", "message", "tips", "data")),
+        "top-level fields are required",
+    )
+    raw_data = payload.get("data")
+    _expect(isinstance(raw_data, dict), "data must be an object")
+    _expect(
+        "status" in raw_data and "doc_recognize_result" in raw_data,
+        "data status and pages are required",
+    )
+
+    try:
+        payload = ParseResponse.model_validate(payload).model_dump(mode="json")
+    except PydanticValidationError as exc:
+        raise ContractValidationError(f"output structure is invalid: {exc}") from exc
+
+    _expect(isinstance(payload, dict), "top-level JSON must be an object")
     _expect(payload.get("code") == "success", "top-level code must be success")
     _expect(payload.get("message") == "", "top-level message must be empty on success")
     _expect(payload.get("tips") is None, "top-level tips must be null on success")
@@ -148,7 +169,7 @@ def main() -> int:
         with args.result.open("r", encoding="utf-8") as stream:
             payload = json.load(stream)
         validate(payload)
-    except (OSError, json.JSONDecodeError, ValidationError) as exc:
+    except (OSError, json.JSONDecodeError, ContractValidationError) as exc:
         parser.exit(1, f"validation failed: {exc}\n")
 
     print(f"validation passed: {args.result}")

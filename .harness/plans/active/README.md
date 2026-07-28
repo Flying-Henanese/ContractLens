@@ -1,6 +1,7 @@
 # Active Plans
 
-这里保存正在执行的跨模块或跨阶段计划，文件名使用 `YYYY-MM-DD-short-topic.md`。
+| 计划 | 目标 | 状态 | 最后更新 |
+| --- | --- | --- | --- |
+| [`2026-07-28-whole-document-submission.md`](2026-07-28-whole-document-submission.md) | 将远端提交由逐页改为整份 PDF | active | 2026-07-28 |
 
-计划必须遵循 [`../../PLANS.md`](../../PLANS.md)，并在每个工作阶段更新进度和验证证据。
-完成后将文件移动到 `../completed/`，不要把已经完成的计划留在本目录。
+计划格式和生命周期见 [`../CONVENTIONS.md`](../CONVENTIONS.md)。完成后必须从本表移除并移入 `../archive/`。

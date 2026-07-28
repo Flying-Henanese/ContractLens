@@ -29,6 +29,9 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 Push-Location $RepoRoot
 try {
     if ($Mode -in @("Lint", "Full")) {
+        Invoke-Checked -Label "Harness structure" -Arguments @(
+            "run", "python", ".harness\scripts\harness_lint.py"
+        )
         Invoke-Checked -Label "Ruff format check" -Arguments @("run", "ruff", "format", "--check", ".")
         Invoke-Checked -Label "Ruff lint" -Arguments @("run", "ruff", "check", ".")
     }

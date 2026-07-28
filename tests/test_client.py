@@ -47,3 +47,30 @@ async def test_client_reports_pipeline_error():
     async with PaddleXClient(settings) as client:
         with pytest.raises(PaddleXError, match="第 3 页解析失败：bad model"):
             await client.parse_pdf_page(b"%PDF-test", page_num=3)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    ("response", "expected_message"),
+    [
+        (
+            httpx.Response(200, text="not-json"),
+            "第 4 页：PaddleX 返回的不是 JSON",
+        ),
+        (
+            httpx.Response(200, json=[]),
+            "第 4 页：PaddleX 返回的 JSON 顶层不是对象",
+        ),
+    ],
+)
+async def test_client_response_shape_errors_include_page_context(
+    response: httpx.Response,
+    expected_message: str,
+):
+    respx.post("http://paddlex.test/layout-parsing").mock(return_value=response)
+    settings = Settings(endpoint="http://paddlex.test", retries=0)
+
+    async with PaddleXClient(settings) as client:
+        with pytest.raises(PaddleXError, match=expected_message):
+            await client.parse_pdf_page(b"%PDF-test", page_num=4)

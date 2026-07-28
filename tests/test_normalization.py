@@ -259,3 +259,46 @@ def test_unmatched_seal_regions_do_not_expose_local_coordinates_as_page_coordina
     assert all(not seal.layout_bbox for seal in seals)
     assert all(not seal.texts[0].position for seal in seals)
     assert all(not seal.texts[0].layout_bbox for seal in seals)
+
+
+def test_explicit_crop_bbox_has_per_seal_priority_over_complete_markdown_regions():
+    raw = {
+        "prunedResult": {
+            "width": 1000,
+            "height": 1200,
+            "layout_det_res": {
+                "boxes": [
+                    {"label": "seal", "coordinate": [500, 600, 700, 800]},
+                    {"label": "seal", "coordinate": [100, 100, 300, 300]},
+                ]
+            },
+            "seal_res_list": [
+                {
+                    "crop_bbox": [700, 700, 900, 900],
+                    "rec_texts": ["explicit seal"],
+                    "rec_scores": [0.9],
+                    "rec_polys": [[[10, 10], [50, 10], [50, 50], [10, 50]]],
+                },
+                {
+                    "rec_texts": ["markdown seal"],
+                    "rec_scores": [0.95],
+                    "rec_polys": [[[20, 20], [60, 20], [60, 60], [20, 60]]],
+                },
+            ],
+        },
+        "markdown": {
+            "images": {
+                "imgs/img_in_seal_box_500_600_700_800.jpg": "first",
+                "imgs/img_in_seal_box_100_100_300_300.jpg": "second",
+            }
+        },
+    }
+
+    result = normalize_page(raw, page_num=1, started_at=time.perf_counter())
+
+    seals = [detail for detail in result.document_details if isinstance(detail, SealDetail)]
+    assert [seal.texts[0].text for seal in seals] == ["markdown seal", "explicit seal"]
+    assert seals[0].seal_region_bbox == [100, 100, 300, 300]
+    assert seals[0].texts[0].layout_bbox == [120, 120, 160, 160]
+    assert seals[1].seal_region_bbox == [700, 700, 900, 900]
+    assert seals[1].texts[0].layout_bbox == [710, 710, 750, 750]

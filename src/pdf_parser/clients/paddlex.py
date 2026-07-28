@@ -31,7 +31,7 @@ class PaddleXClient:
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise PaddleXError(f"PaddleX 健康检查失败：{exc}") from exc
-        return self._decode_response(response)
+        return self._decode_response(response, context="PaddleX 健康检查")
 
     async def parse_pdf_page(self, page_pdf: bytes, page_num: int) -> dict[str, Any]:
         payload = {
@@ -54,22 +54,25 @@ class PaddleXClient:
         except (httpx.TransportError, httpx.TimeoutException) as exc:
             raise PaddleXError(f"第 {page_num} 页请求 PaddleX 失败：{exc}") from exc
 
-        body = self._decode_response(response)
+        context = f"第 {page_num} 页"
+        body = self._decode_response(response, context=context)
         if response.status_code != 200 or body.get("errorCode") != 0:
             message = body.get("errorMsg") or f"HTTP {response.status_code}"
-            raise PaddleXError(f"第 {page_num} 页解析失败：{message}")
+            raise PaddleXError(f"{context}解析失败：{message}")
 
         results = (body.get("result") or {}).get("layoutParsingResults") or []
         if len(results) != 1:
-            raise PaddleXError(f"第 {page_num} 页响应页数异常：期望 1 页，实际 {len(results)} 页")
+            raise PaddleXError(f"{context}响应页数异常：期望 1 页，实际 {len(results)} 页")
         return results[0]
 
     @staticmethod
-    def _decode_response(response: httpx.Response) -> dict[str, Any]:
+    def _decode_response(response: httpx.Response, *, context: str) -> dict[str, Any]:
         try:
             body = response.json()
         except ValueError as exc:
-            raise PaddleXError(f"PaddleX 返回的不是 JSON（HTTP {response.status_code}）") from exc
+            raise PaddleXError(
+                f"{context}：PaddleX 返回的不是 JSON（HTTP {response.status_code}）"
+            ) from exc
         if not isinstance(body, dict):
-            raise PaddleXError("PaddleX 返回的 JSON 顶层不是对象")
+            raise PaddleXError(f"{context}：PaddleX 返回的 JSON 顶层不是对象")
         return body

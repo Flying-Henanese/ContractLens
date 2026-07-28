@@ -114,23 +114,27 @@ def _resolve_seal_regions(
     page_width: int,
     page_height: int,
 ) -> list[_SealRegion | None]:
-    explicit = [_explicit_seal_region(result) for result in seal_results]
-    if explicit and all(region is not None for region in explicit):
-        return [_clamp_region(region, page_width, page_height) for region in explicit]
-
+    explicit_regions = [_explicit_seal_region(result) for result in seal_results]
     markdown_regions = _markdown_seal_regions(markdown)
     layout_regions = _layout_seal_regions(layout_result)
-    if len(markdown_regions) == len(seal_results):
-        resolved = []
-        for index, region in enumerate(markdown_regions):
-            score = (
-                layout_regions[index].score if len(layout_regions) == len(seal_results) else None
-            )
-            resolved.append(_SealRegion(region.bbox, score))
-        return [_clamp_region(region, page_width, page_height) for region in resolved]
-    if len(layout_regions) == len(seal_results):
-        return [_clamp_region(region, page_width, page_height) for region in layout_regions]
-    return [None] * len(seal_results)
+    markdown_matches = len(markdown_regions) == len(seal_results)
+    layout_matches = len(layout_regions) == len(seal_results)
+
+    resolved: list[_SealRegion | None] = []
+    for index, explicit_region in enumerate(explicit_regions):
+        if explicit_region is not None:
+            region = explicit_region
+        elif markdown_matches:
+            score = layout_regions[index].score if layout_matches else None
+            region = _SealRegion(markdown_regions[index].bbox, score)
+        elif layout_matches:
+            region = layout_regions[index]
+        else:
+            region = None
+        resolved.append(
+            _clamp_region(region, page_width, page_height) if region is not None else None
+        )
+    return resolved
 
 
 def _explicit_seal_region(result: dict[str, Any]) -> _SealRegion | None:
