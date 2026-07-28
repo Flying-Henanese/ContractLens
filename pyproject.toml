@@ -1,0 +1,47 @@
+[project]
+name = "pdf-parser"
+version = "0.1.0"
+description = "PaddleX PDF document parser"
+readme = "README.md"
+authors = [
+    { name = "ZHOU Shujian", email = "flyinghenanese@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.140.0",
+    "httpx>=0.28",
+    "orjson>=3.10",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "pypdf>=5.0",
+    "python-multipart>=0.0.32",
+    "tenacity>=9.0",
+    "typer>=0.15",
+    "uvicorn>=0.51.0",
+]
+
+[project.scripts]
+pdf-parser = "pdf_parser.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.11.17,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "respx>=0.22",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
