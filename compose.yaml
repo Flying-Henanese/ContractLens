@@ -1,0 +1,40 @@
+name: pdf-parser
+
+services:
+  api:
+    image: ${PDF_PARSER_IMAGE:-pdf-parser:cuda12.2}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CUDA_VERSION: "12.2.2"
+        UBUNTU_VERSION: "22.04"
+        PYTHON_VERSION: "3.11"
+        UV_VERSION: "0.11.32"
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${PDF_PARSER_PORT:-8888}:8888"
+    environment:
+      PDF_PARSER_ENDPOINT: ${PDF_PARSER_ENDPOINT:-http://192.168.0.194:8080}
+      PDF_PARSER_TIMEOUT_SECONDS: ${PDF_PARSER_TIMEOUT_SECONDS:-120}
+      PDF_PARSER_RETRIES: ${PDF_PARSER_RETRIES:-2}
+      PDF_PARSER_CONCURRENCY: ${PDF_PARSER_CONCURRENCY:-1}
+      PDF_PARSER_USE_LAYOUT_DETECTION: ${PDF_PARSER_USE_LAYOUT_DETECTION:-true}
+      PDF_PARSER_LAYOUT_THRESHOLD: ${PDF_PARSER_LAYOUT_THRESHOLD:-0.5}
+      PDF_PARSER_TRUST_ENV: ${PDF_PARSER_TRUST_ENV:-false}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities:
+                - gpu
+    read_only: true
+    tmpfs:
+      - /tmp:size=${PDF_PARSER_TMPFS_SIZE:-2g},mode=1777
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s

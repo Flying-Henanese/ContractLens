@@ -1,10 +1,10 @@
-﻿# Remote Targets
+# Remote Targets
 
 ## T4 服务器
 
 确认日期：2026-07-29
 
-- SSH 配置别名：`T4服务器`
+- SSH 配置别名：`contractlens-t4`
 - 主机：`192.168.0.67`
 - 用户：`mineru_dev`
 - 项目目录：`/home/mineru_dev/projects/ContractLens`

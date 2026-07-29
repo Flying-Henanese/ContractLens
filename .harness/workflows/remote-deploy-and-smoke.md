@@ -8,7 +8,7 @@
 3. 只读检查远端：
 
    ```powershell
-   ssh "T4服务器" "cd /home/mineru_dev/projects/ContractLens && pwd && git status --short --branch"
+   ssh contractlens-t4 "cd /home/mineru_dev/projects/ContractLens && pwd && git status --short --branch"
    ```
 
 4. 远端存在未提交改动、分支不符或目录不存在时停止。不得使用强制覆盖、`git reset --hard`
@@ -17,7 +17,7 @@
    才能启动或重启服务：
 
    ```powershell
-   ssh "T4服务器" "cd /home/mineru_dev/projects/ContractLens && git pull --ff-only && uv sync --frozen"
+   ssh contractlens-t4 "cd /home/mineru_dev/projects/ContractLens && git pull --ff-only && uv sync --frozen"
    ```
 
 6. 按已确认的服务管理器重启 FastAPI。当前服务管理方式和服务名尚未记录，因此在补齐前不得
