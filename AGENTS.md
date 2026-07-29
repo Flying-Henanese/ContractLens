@@ -67,5 +67,7 @@
 - 远端项目目录固定为 `/home/mineru_dev/projects/ContractLens`。
 - 影响 FastAPI、PaddleX 请求、归一化或输出契约的改动，在本地门槛通过后按远端部署工作流验证。
 - 部署前必须检查远端分支和工作区；存在未提交改动时停止，不得强制覆盖、清理或重置。
-- 启动或重启远端服务前，必须在项目目录执行 `git pull --ff-only` 同步代码，再运行 `uv sync --frozen`。
-- 服务管理方式未确认前，不得用 `pkill`、递归删除或临时后台进程冒充可靠重启。
+- T4 上的 FastAPI 使用 Docker Compose 管理。部署时先在项目目录执行 `git pull --ff-only`，
+  再依次验证 Compose 配置、构建镜像并更新容器；宿主机不运行 `uv sync`。
+- 使用仓库的 `scripts/docker.sh` 管理容器，不得用 `pkill`、递归删除或临时后台进程
+  冒充可靠重启。

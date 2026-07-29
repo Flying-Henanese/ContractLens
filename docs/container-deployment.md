@@ -86,3 +86,6 @@ rollout must still follow the repository remote deployment workflow:
 4. build the image;
 5. start the service and inspect its health and logs;
 6. run the repository remote smoke test against the deployed API.
+
+Dependency synchronization happens inside the Docker image build. Do not run
+`uv sync` separately on the T4 host.
