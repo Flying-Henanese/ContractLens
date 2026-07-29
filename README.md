@@ -69,11 +69,15 @@ Copy-Item .env.template .env
 ```powershell
 $env:PDF_PARSER_ENDPOINT = "http://192.168.0.194:8080"
 $env:PDF_PARSER_TIMEOUT_SECONDS = "180"
+$env:PDF_PARSER_USE_LAYOUT_DETECTION = "true"
+$env:PDF_PARSER_LAYOUT_THRESHOLD = "0.5"
 # 如确实需要让请求继承系统 HTTP(S) 代理：
 $env:PDF_PARSER_TRUST_ENV = "true"
 ```
 
 CLI 参数优先于环境变量。默认不继承系统代理，避免内网 PaddleX 地址被错误发送到代理服务器。
+客户端默认显式启用版面检测，并使用可配置的 `layoutThreshold=0.5`。该值与 PaddleOCR-VL
+默认值及当前远端验证配置一致，是召回率与误检之间的中性起点，不代表所有文档的最优阈值。
 
 ## 输出结构
 

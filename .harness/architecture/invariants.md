@@ -11,7 +11,7 @@
 
 ## PaddleX 边界
 
-1. PDF 请求显式包含 `fileType=0` 和 `visualize=false`。
+1. PDF 请求显式包含 `fileType=0`、`visualize=false`、`useLayoutDetection`（默认 `true`）和可配置的 `layoutThreshold`。
 2. 成功响应必须满足 HTTP 200、`errorCode == 0` 和预期的 `layoutParsingResults` 形状。
 3. 传输错误和超时可以重试；明确业务错误不盲目重试。
 4. 错误包含可定位的文档或页码上下文，但不包含 Base64、完整响应或敏感正文。
@@ -20,7 +20,7 @@
 ## 归一化与坐标
 
 1. 正文依次从版面块、块内整体 OCR、整体 OCR 和 Markdown 文本回退。
-2. 同一物理印章对应一个 `SealDetail`，其多段 OCR 文本位于 `texts[]`。
+2. 同一物理印章对应一个 `SealDetail`；物理区域来自版面检测，`seal_res_list` 是可选文字来源。没有印章 OCR 结果时仍输出区域、ID 和引用，`texts=[]`。
 3. `rec_texts[i]` 与同下标的 `rec_scores[i]`、`rec_polys[i]` 配对；仅在缺少 `rec_polys` 时回退 `rec_boxes`，不使用 `dt_polys` 配对识别文本。
 4. 印章局部 polygon 只有取得可靠 `crop_bbox` 后才能逐点平移到页面坐标：`page_x = local_x + crop_bbox.x0`，`page_y = local_y + crop_bbox.y0`。
 5. 每枚印章独立按服务端显式 `crop_bbox`、Markdown 图片键、版面检测印章框的顺序选择裁剪框；后两种来源只有在区域数量与识别结果数量一致时才能按原始下标绑定。

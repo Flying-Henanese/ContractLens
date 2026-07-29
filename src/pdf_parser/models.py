@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Point(BaseModel):
@@ -64,6 +64,15 @@ class PageResult(BaseModel):
     document_details: list[SealDetail | DocumentDetail] = Field(default_factory=list)
     content_references: list[ContentReference] = Field(default_factory=list)
     parse_time: float
+
+    @model_validator(mode="after")
+    def require_structured_seal_details(self) -> PageResult:
+        if any(
+            detail.type == "Seal" and not isinstance(detail, SealDetail)
+            for detail in self.document_details
+        ):
+            raise ValueError("type=Seal 的文档元素必须使用 SealDetail")
+        return self
 
 
 class ResultData(BaseModel):

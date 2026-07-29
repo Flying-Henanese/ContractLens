@@ -31,6 +31,8 @@ async def test_client_sends_a_single_pdf_page():
     request_body = json.loads(route.calls[0].request.content)
     assert base64.b64decode(request_body["file"]) == b"%PDF-test"
     assert request_body["fileType"] == 0
+    assert request_body["useLayoutDetection"] is True
+    assert request_body["layoutThreshold"] == 0.5
     assert request_body["visualize"] is False
     assert request_body["logId"] == "pdf-parser-page-7"
     assert result == {"prunedResult": {}}

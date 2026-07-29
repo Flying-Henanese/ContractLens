@@ -11,6 +11,7 @@
 | 实现、修复或重构 | [`workflows/change.md`](workflows/change.md) | `scripts/check.ps1` |
 | 代码评审 | [`workflows/review.md`](workflows/review.md) | 定向测试、`git diff` |
 | 远端协议或模型行为 | [`workflows/remote-validation.md`](workflows/remote-validation.md) 和 [`operations/remote-state.md`](operations/remote-state.md) | `scripts/smoke.ps1` |
+| 部署到 T4 并验证 | [`workflows/remote-deploy-and-smoke.md`](workflows/remote-deploy-and-smoke.md) 和 [`operations/remote-targets.md`](operations/remote-targets.md) | SSH、`scripts/smoke.ps1` |
 | 跨模块或多阶段任务 | [`plans/CONVENTIONS.md`](plans/CONVENTIONS.md) | `plans/active/` |
 | 查找历史决策或实验 | `plans/archive/`、`reports/` | 只读历史证据 |
 

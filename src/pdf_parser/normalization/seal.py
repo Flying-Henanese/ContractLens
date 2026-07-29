@@ -24,6 +24,7 @@ _SEAL_IMAGE_PATTERN = re.compile(
 class _SealRegion:
     bbox: list[int]
     score: float | None = None
+    fallback_text: str = ""
 
 
 def append_seal_details(
@@ -34,11 +35,24 @@ def append_seal_details(
     page_num: int,
     page_width: int,
     page_height: int,
+    parsing_blocks: Any,
 ) -> None:
-    if not isinstance(seal_results, list):
+    results = (
+        [result for result in seal_results if isinstance(result, dict)]
+        if isinstance(seal_results, list)
+        else []
+    )
+    if not results:
+        _append_detected_seal_details(
+            details,
+            layout_result,
+            parsing_blocks,
+            page_num,
+            page_width,
+            page_height,
+        )
         return
 
-    results = [result for result in seal_results if isinstance(result, dict)]
     regions = _resolve_seal_regions(
         results,
         layout_result,
@@ -78,6 +92,41 @@ def append_seal_details(
         )
 
 
+def _append_detected_seal_details(
+    details: list[DocumentDetail],
+    layout_result: Any,
+    parsing_blocks: Any,
+    page_num: int,
+    page_width: int,
+    page_height: int,
+) -> None:
+    regions = _standalone_seal_regions(
+        layout_result,
+        parsing_blocks,
+        page_width,
+        page_height,
+    )
+    for seal_index, region in enumerate(regions, start=1):
+        reference_token = f"[印章{seal_index}]"
+        index = len(details)
+        details.append(
+            SealDetail(
+                text=reference_token,
+                position=_position_from_bbox(region.bbox),
+                layout_score=region.score,
+                layout_order=float(index),
+                layout_reading_index=index,
+                layout_bbox=region.bbox,
+                layout_fallback_text=region.fallback_text,
+                seal_id=f"page-{page_num}-seal-{seal_index}",
+                seal_index=seal_index,
+                reference_token=reference_token,
+                seal_region_bbox=region.bbox,
+                texts=[],
+            )
+        )
+
+
 def build_content(
     details: Iterable[DocumentDetail],
 ) -> tuple[str, list[ContentReference]]:
@@ -105,6 +154,36 @@ def build_content(
                 )
         offset += len(detail.text)
     return "\n".join(parts).strip(), references
+
+
+def _standalone_seal_regions(
+    layout_result: Any,
+    parsing_blocks: Any,
+    page_width: int,
+    page_height: int,
+) -> list[_SealRegion]:
+    layout_regions = _layout_seal_regions(layout_result)
+    parsing_regions = _parsing_seal_regions(parsing_blocks)
+    fallback_by_bbox = {
+        tuple(region.bbox): region.fallback_text
+        for region in parsing_regions
+        if region.fallback_text
+    }
+    if layout_regions:
+        regions = [
+            _SealRegion(
+                region.bbox,
+                region.score,
+                fallback_by_bbox.get(tuple(region.bbox), ""),
+            )
+            for region in layout_regions
+        ]
+    else:
+        regions = parsing_regions
+
+    clamped = [_clamp_region(region, page_width, page_height) for region in regions]
+    clamped.sort(key=lambda region: (region.bbox[1], region.bbox[0]))
+    return clamped
 
 
 def _resolve_seal_regions(
@@ -156,6 +235,24 @@ def _markdown_seal_regions(markdown: Any) -> list[_SealRegion]:
         match = _SEAL_IMAGE_PATTERN.search(str(path).replace("\\", "/"))
         if match:
             regions.append(_SealRegion([int(value) for value in match.groups()]))
+    return regions
+
+
+def _parsing_seal_regions(parsing_blocks: Any) -> list[_SealRegion]:
+    if not isinstance(parsing_blocks, list):
+        return []
+    regions = []
+    for block in parsing_blocks:
+        if not isinstance(block, dict):
+            continue
+        bbox = _bbox(block.get("block_bbox") or block.get("bbox"))
+        if bbox:
+            regions.append(
+                _SealRegion(
+                    bbox,
+                    fallback_text=_clean_text(block.get("block_content") or block.get("text")),
+                )
+            )
     return regions
 
 
@@ -273,7 +370,7 @@ def _clamp_region(region: _SealRegion, page_width: int, page_height: int) -> _Se
             min(max(x1, 0), page_width),
             min(max(y1, 0), page_height),
         ]
-    return _SealRegion(bbox, region.score)
+    return _SealRegion(bbox, region.score, region.fallback_text)
 
 
 def _position_from_bbox(bbox: list[int]) -> list[Position]:

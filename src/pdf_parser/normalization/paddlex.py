@@ -30,13 +30,17 @@ def normalize_page(raw_page: dict[str, Any], page_num: int, started_at: float) -
     raw_blocks = pruned.get("parsing_res_list") or []
     blocks = [block for block in raw_blocks if isinstance(block, dict)]
     blocks.sort(key=_block_sort_key)
+    seal_blocks = [
+        block
+        for block in blocks
+        if str(block.get("block_label") or block.get("label") or "").lower() == "seal"
+    ]
+    blocks = [
+        block
+        for block in blocks
+        if str(block.get("block_label") or block.get("label") or "").lower() != "seal"
+    ]
     seal_results = pruned.get("seal_res_list") or []
-    if isinstance(seal_results, list) and any(isinstance(result, dict) for result in seal_results):
-        blocks = [
-            block
-            for block in blocks
-            if str(block.get("block_label") or block.get("label") or "").lower() != "seal"
-        ]
 
     details: list[DocumentDetail] = []
     for index, block in enumerate(blocks):
@@ -68,6 +72,7 @@ def normalize_page(raw_page: dict[str, Any], page_num: int, started_at: float) -
         page_num,
         width,
         height,
+        seal_blocks,
     )
     content, content_references = build_content(details)
 

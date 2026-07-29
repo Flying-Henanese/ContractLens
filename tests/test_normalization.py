@@ -1,6 +1,9 @@
 import time
 
-from pdf_parser.models import SealDetail
+import pytest
+from pydantic import ValidationError
+
+from pdf_parser.models import DocumentDetail, PageResult, SealDetail
 from pdf_parser.normalization.paddlex import normalize_page
 
 
@@ -302,3 +305,69 @@ def test_explicit_crop_bbox_has_per_seal_priority_over_complete_markdown_regions
     assert seals[0].texts[0].layout_bbox == [120, 120, 160, 160]
     assert seals[1].seal_region_bbox == [700, 700, 900, 900]
     assert seals[1].texts[0].layout_bbox == [710, 710, 750, 750]
+
+
+def test_layout_seal_without_ocr_becomes_structured_seal_detail():
+    raw = {
+        "prunedResult": {
+            "width": 1191,
+            "height": 1684,
+            "parsing_res_list": [
+                {
+                    "block_label": "seal",
+                    "block_content": "块级降级文本",
+                    "block_bbox": [592, 0, 861, 222],
+                    "block_order": 0,
+                }
+            ],
+            "layout_det_res": {
+                "boxes": [
+                    {
+                        "label": "seal",
+                        "score": 0.9355565309524536,
+                        "coordinate": [592, 0, 861, 222],
+                    }
+                ]
+            },
+        },
+        "markdown": {"text": ""},
+    }
+
+    result = normalize_page(raw, page_num=1, started_at=time.perf_counter())
+
+    assert len(result.document_details) == 1
+    seal = result.document_details[0]
+    assert isinstance(seal, SealDetail)
+    assert seal.seal_id == "page-1-seal-1"
+    assert seal.reference_token == "[印章1]"
+    assert seal.layout_score == pytest.approx(0.9355565309524536)
+    assert seal.layout_bbox == [592, 0, 861, 222]
+    assert seal.seal_region_bbox == [592, 0, 861, 222]
+    assert seal.position[0].points[2].model_dump() == {"x": 861, "y": 222}
+    assert seal.layout_fallback_text == "块级降级文本"
+    assert seal.text == "[印章1]"
+    assert seal.texts == []
+    assert result.document_content == "[印章1]"
+    assert result.content_references[0].target_id == seal.seal_id
+
+
+def test_page_result_rejects_unstructured_seal_detail():
+    detail = DocumentDetail(
+        type="Seal",
+        text="不完整印章",
+        layout_label="seal",
+        layout_mapped_type="Seal",
+        layout_order=0,
+        layout_reading_index=0,
+        layout_bbox=[10, 20, 30, 40],
+    )
+
+    with pytest.raises(ValidationError, match="必须使用 SealDetail"):
+        PageResult(
+            page_num=1,
+            document_content="不完整印章",
+            image_width=100,
+            image_height=100,
+            document_details=[detail],
+            parse_time=0.1,
+        )

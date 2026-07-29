@@ -22,6 +22,7 @@
 3. 实现、修复、重构或评审遵循 [`.harness/workflows/change.md`](.harness/workflows/change.md)。
 4. 跨模块、协议、输出契约、失败策略或多阶段任务按 [`.harness/plans/CONVENTIONS.md`](.harness/plans/CONVENTIONS.md) 创建执行计划。
 5. 涉及远端服务参数或模型行为时，读取 [`.harness/operations/remote-state.md`](.harness/operations/remote-state.md)，并重新检查实际服务。
+6. 需要部署项目代码到 T4 服务器验证时，读取 [`.harness/operations/remote-targets.md`](.harness/operations/remote-targets.md)，并遵循 [`.harness/workflows/remote-deploy-and-smoke.md`](.harness/workflows/remote-deploy-and-smoke.md)。
 
 用户当前任务中的明确要求优先于仓库文档；本文件与 `.harness/` 冲突时以本文件为准。
 
@@ -59,3 +60,12 @@
 ```
 
 远端不可用时应明确报告未运行的验证，不得以模拟结果代替真实烟测。
+
+## 6. 远端开发环境
+
+- T4 服务器通过本机 SSH 配置中的 `T4服务器` 别名访问，仓库不保存私钥或私钥路径。
+- 远端项目目录固定为 `/home/mineru_dev/projects/ContractLens`。
+- 影响 FastAPI、PaddleX 请求、归一化或输出契约的改动，在本地门槛通过后按远端部署工作流验证。
+- 部署前必须检查远端分支和工作区；存在未提交改动时停止，不得强制覆盖、清理或重置。
+- 启动或重启远端服务前，必须在项目目录执行 `git pull --ff-only` 同步代码，再运行 `uv sync --frozen`。
+- 服务管理方式未确认前，不得用 `pkill`、递归删除或临时后台进程冒充可靠重启。

@@ -37,6 +37,8 @@ class PaddleXClient:
         payload = {
             "file": base64.b64encode(page_pdf).decode("ascii"),
             "fileType": 0,
+            "useLayoutDetection": self.settings.use_layout_detection,
+            "layoutThreshold": self.settings.layout_threshold,
             "visualize": False,
             "logId": f"pdf-parser-page-{page_num}",
         }
