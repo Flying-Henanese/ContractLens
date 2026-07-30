@@ -1,102 +1,117 @@
 # Docker Compose deployment
 
-The FastAPI service can be built for CUDA 12.2, Linux amd64, and Ubuntu 22.04.
-Containerization does not move PaddleX inference into this repository: the service
+The FastAPI client can be built for either the existing CUDA 12.2 environment or a
+Huawei Ascend host. Both deployments use the same `compose.yaml`; only the selected
+Dockerfile and image tag change.
+
+Containerization does not move PaddleX inference into this repository. The service
 continues to call the remote `layout-parsing` Pipeline configured by
-`PDF_PARSER_ENDPOINT`.
+`PDF_PARSER_ENDPOINT`, so the application container does not consume a local GPU or
+NPU.
 
-## Image design
+## Image designs
 
-The Dockerfile uses two CUDA stages:
+### CUDA
 
-- `nvidia/cuda:12.2.2-devel-ubuntu22.04` installs uv-managed Python 3.11 and the
-  locked production dependencies. Compilers, uv, and its cache remain in this
-  builder stage.
-- `nvidia/cuda:12.2.2-runtime-ubuntu22.04` receives only the managed Python
-  interpreter and the completed virtual environment.
+The default `Dockerfile` uses two CUDA stages:
 
-The final process runs as UID/GID `10001`, uses a read-only root filesystem, and
-writes temporary uploaded PDFs under the `/tmp` tmpfs.
+- `nvidia/cuda:12.2.2-devel-ubuntu22.04` installs the uv-managed Python 3.11 runtime
+  and locked production dependencies.
+- `nvidia/cuda:12.2.2-runtime-ubuntu22.04` receives only the managed Python runtime
+  and completed virtual environment.
 
-## Configuration
+### Huawei Ascend
 
-Docker Compose reads the same variables as the existing `.env` file. Start from
-`.env.template` and review at least:
+`Dockerfile.ascend` uses a multi-stage Ubuntu base and supports Docker's native
+`linux/amd64` and `linux/arm64` builds. It intentionally does not install CANN,
+Ascend drivers, or Paddle NPU packages because this container performs no local model
+inference. `ASCEND_BASE_IMAGE` can replace the default `ubuntu:22.04` base when an
+organization requires an approved internal Ubuntu-derived image.
+
+Both final images run as UID/GID `10001`, use a read-only root filesystem, and write
+temporary uploaded PDFs under the `/tmp` tmpfs.
+
+## Shared Compose configuration
+
+Compose reads `.env`. Start from `.env.template` and review the remote endpoint plus
+the container settings.
+
+The default CUDA selection is:
 
 ```dotenv
-PDF_PARSER_ENDPOINT=http://192.168.0.194:8080
+PDF_PARSER_DOCKERFILE=Dockerfile
+PDF_PARSER_IMAGE=pdf-parser:cuda12.2
 PDF_PARSER_PORT=8888
 PDF_PARSER_TMPFS_SIZE=2g
-PDF_PARSER_IMAGE=pdf-parser:cuda12.2
 ```
 
-`PDF_PARSER_PORT`, `PDF_PARSER_TMPFS_SIZE`, and `PDF_PARSER_IMAGE` are Compose-only
-settings. Other `PDF_PARSER_*` values are passed into the application container.
-Do not append `/layout-parsing` or `/health` to `PDF_PARSER_ENDPOINT`.
+For an Ascend host, change only the image selection:
+
+```dotenv
+PDF_PARSER_DOCKERFILE=Dockerfile.ascend
+PDF_PARSER_IMAGE=pdf-parser:ascend-ubuntu22.04
+ASCEND_BASE_IMAGE=ubuntu:22.04
+```
+
+`compose.yaml` does not set `platform`, so Docker builds for the host's native CPU
+architecture. It also does not reserve NVIDIA or Ascend devices: neither is used by
+this remote-inference client. This is what makes the application service, ports,
+environment, security settings, source mount, health check, and lifecycle commands
+shareable across both hosts.
+
+If local NPU inference is added in the future, it will require an Ascend-specific
+Compose override for device nodes, driver libraries, and CANN settings; the current
+shared file must not be assumed sufficient for that different architecture.
 
 ## Host prerequisites
 
-Before deployment, confirm that the Linux x86_64 host has:
+For either host, confirm:
 
-1. an NVIDIA driver compatible with CUDA 12.2;
-2. Docker Engine and Docker Compose v2;
-3. NVIDIA Container Toolkit configured for Docker;
-4. network access from the container to `PDF_PARSER_ENDPOINT`.
+1. Docker Engine and Docker Compose v2 are installed;
+2. the host can pull the selected base images and Python dependencies;
+3. the container can reach `PDF_PARSER_ENDPOINT`;
+4. an ARM64 Ascend host builds natively rather than forcing `linux/amd64` emulation.
 
-The Compose service reserves all available NVIDIA GPUs. This preserves the requested
-CUDA runtime contract, although the current PDF Parser client does not itself run
-GPU inference.
+No NVIDIA Container Toolkit, Ascend Docker Runtime, or NPU device mapping is required
+for this client container.
 
 ## Active-iteration source mount
 
-`compose.yaml` is configured for the current rapid-iteration phase. It bind-mounts
-`./src` read-only at `/app/src`, sets `PYTHONPATH=/app/src`, and overrides the image
-entrypoint with Uvicorn restricted to reload that directory. Python source changes are
-therefore detected and reloaded without rebuilding or recreating the container.
+`compose.yaml` bind-mounts `./src` read-only at `/app/src`, sets
+`PYTHONPATH=/app/src`, and starts Uvicorn with reload restricted to that directory.
+Python source changes are therefore detected without rebuilding the image.
 
-The mount does not replace the image-managed Python interpreter or locked dependencies.
-Changes to `pyproject.toml`, `uv.lock`, `Dockerfile`, `compose.yaml`, or environment
-configuration still require a rebuild or container recreation. The source mount is
-read-only; do not edit application code inside the container.
+The mount does not replace the image-managed Python interpreter or locked
+dependencies. Changes to `pyproject.toml`, `uv.lock`, either Dockerfile,
+`compose.yaml`, or environment configuration require a rebuild or container
+recreation.
+
 ## Review and lifecycle commands
 
-The Linux helper defaults to the non-mutating Compose validation action:
+The Linux helper defaults to non-mutating validation:
 
 ```bash
 bash scripts/docker.sh
 bash scripts/docker.sh config
 ```
 
-After review and approval, the lifecycle is:
+Build and start the Dockerfile selected by `.env`:
 
 ```bash
 bash scripts/docker.sh build
 bash scripts/docker.sh up
 bash scripts/docker.sh ps
 bash scripts/docker.sh logs
-bash scripts/docker.sh restart
-bash scripts/docker.sh down
 ```
 
-`build` pulls current content for the pinned base tags. `up` starts the service in
-the background with the `unless-stopped` restart policy. `down` removes the
-container and Compose network but retains the locally built image.
+Other supported actions are `restart` and `down`. The health check requests
+`http://127.0.0.1:8888/openapi.json` inside the container. The external API is
+available at `http://<host>:${PDF_PARSER_PORT}`.
 
-The health check requests `http://127.0.0.1:8888/openapi.json` from inside the
-container. The external API remains available on
-`http://<host>:${PDF_PARSER_PORT}`.
+## T4 rollout
 
-## Future T4 rollout
-
-Do not run the commands below until the local files are approved. The later server
-rollout must still follow the repository remote deployment workflow:
-
-1. inspect the remote branch and working tree and stop if it is dirty;
-2. run `git pull --ff-only` in `/home/mineru_dev/projects/ContractLens`;
-3. validate Compose configuration;
-4. build the image;
-5. start the service and inspect its health and logs;
-6. run the repository remote smoke test against the deployed API.
-
-Dependency synchronization happens inside the Docker image build. Do not run
-`uv sync` separately on the T4 host.
+The T4 server continues to use the default CUDA selection. Deployment must still
+follow the repository remote workflow: inspect the remote branch and worktree, pull
+with `--ff-only`, validate Compose, rebuild when container inputs change, update the
+service, inspect health and logs, and run the real smoke test. Dependency
+synchronization happens inside the image build; do not run `uv sync` on the host.

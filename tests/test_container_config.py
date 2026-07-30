@@ -16,14 +16,29 @@ def test_dockerfile_separates_cuda_build_and_runtime_stages():
     assert 'ENTRYPOINT ["pdf-parser-api"]' in runtime
 
 
-def test_compose_targets_amd64_cuda_and_existing_service_port():
+def test_ascend_dockerfile_is_multi_arch_and_separates_build_from_runtime():
+    dockerfile = (ROOT / "Dockerfile.ascend").read_text(encoding="utf-8")
+
+    assert "ARG ASCEND_BASE_IMAGE=ubuntu:22.04" in dockerfile
+    assert "FROM ${ASCEND_BASE_IMAGE} AS builder" in dockerfile
+    assert "FROM ${ASCEND_BASE_IMAGE} AS runtime" in dockerfile
+    assert dockerfile.index(" AS builder") < dockerfile.index(" AS runtime")
+    runtime = dockerfile.split(" AS runtime", maxsplit=1)[1]
+    assert "COPY --from=builder" in runtime
+    assert "COPY --from=uv" not in runtime
+    assert "USER 10001:10001" in runtime
+    assert 'ENTRYPOINT ["pdf-parser-api"]' in runtime
+
+
+def test_compose_is_shared_across_cuda_and_ascend_hosts():
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
-    assert "platform: linux/amd64" in compose
+    assert "dockerfile: ${PDF_PARSER_DOCKERFILE:-Dockerfile}" in compose
     assert 'CUDA_VERSION: "12.2.2"' in compose
     assert '"${PDF_PARSER_PORT:-8888}:8888"' in compose
-    assert "driver: nvidia" in compose
-    assert "count: all" in compose
+    assert "platform:" not in compose
+    assert "driver: nvidia" not in compose
+    assert "/dev/davinci" not in compose
     assert "read_only: true" in compose
     assert "PYTHONPATH: /app/src" in compose
     assert "- --reload" in compose
