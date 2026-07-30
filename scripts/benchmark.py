@@ -33,7 +33,8 @@ def percentile(values: list[float], ratio: float) -> float:
     return ordered[index]
 
 
-def send_request(url: str, body: bytes, timeout: float) -> tuple[float, int]:
+def send_document_request(url: str, body: bytes, timeout: float) -> tuple[float, int]:
+    """Send one complete document; response pages are metrics only."""
     request = urllib.request.Request(
         url,
         data=body,
@@ -65,7 +66,8 @@ def main() -> int:
 
     suffix = args.input.suffix.lower()
     file_type = 0 if suffix == ".pdf" else 1
-    encoded = base64.b64encode(args.input.read_bytes()).decode("ascii")
+    document_bytes = args.input.read_bytes()
+    encoded = base64.b64encode(document_bytes).decode("ascii")
     request_payload = {
         "file": encoded,
         "fileType": file_type,
@@ -81,7 +83,7 @@ def main() -> int:
     print(f"并发：{args.concurrency}，正式请求：{args.requests}，预热：{args.warmup}")
 
     for index in range(args.warmup):
-        elapsed, pages = send_request(url, body, args.timeout)
+        elapsed, pages = send_document_request(url, body, args.timeout)
         print(f"预热 {index + 1}/{args.warmup}: {elapsed:.3f}s, {pages} 页")
 
     latencies: list[float] = []
@@ -91,7 +93,7 @@ def main() -> int:
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         futures = [
-            pool.submit(send_request, url, body, args.timeout)
+            pool.submit(send_document_request, url, body, args.timeout)
             for _ in range(args.requests)
         ]
         for future in concurrent.futures.as_completed(futures):
