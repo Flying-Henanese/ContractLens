@@ -19,13 +19,13 @@
    ssh contractlens-t4 "cd /home/mineru_dev/projects/ContractLens && git pull --ff-only && bash scripts/docker.sh config"
    ```
 
-6. 配置验证成功后构建镜像并更新 FastAPI 容器，然后检查 Compose 状态：
+6. 配置验证成功后，按变更范围更新 FastAPI：仅 `src/` 代码变更由 Compose 的只读挂载和 Uvicorn reload 自动加载；首次启动、依赖、Dockerfile、Compose 或环境配置变更才构建镜像并更新容器。然后检查 Compose 状态：
 
    ```powershell
    ssh contractlens-t4 "cd /home/mineru_dev/projects/ContractLens && bash scripts/docker.sh build && bash scripts/docker.sh up && bash scripts/docker.sh ps"
    ```
 
-   `uv sync --frozen` 只在 Dockerfile 的镜像构建阶段执行；T4 宿主机不单独同步 Python
+   `uv sync --frozen` 只在 Dockerfile 的镜像构建阶段执行；仅代码挂载更新不需要构建或宿主机 Python 同步。T4 宿主机不单独同步 Python
    环境。不得用 `pkill`、递归删除或临时后台进程替代 Compose 管理。
 7. 确认 `api` 容器处于运行且健康状态。若状态异常，读取有限尾部日志后停止部署并报告，
    不得循环重启：

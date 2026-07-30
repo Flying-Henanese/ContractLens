@@ -47,6 +47,17 @@ The Compose service reserves all available NVIDIA GPUs. This preserves the reque
 CUDA runtime contract, although the current PDF Parser client does not itself run
 GPU inference.
 
+## Active-iteration source mount
+
+`compose.yaml` is configured for the current rapid-iteration phase. It bind-mounts
+`./src` read-only at `/app/src`, sets `PYTHONPATH=/app/src`, and overrides the image
+entrypoint with Uvicorn restricted to reload that directory. Python source changes are
+therefore detected and reloaded without rebuilding or recreating the container.
+
+The mount does not replace the image-managed Python interpreter or locked dependencies.
+Changes to `pyproject.toml`, `uv.lock`, `Dockerfile`, `compose.yaml`, or environment
+configuration still require a rebuild or container recreation. The source mount is
+read-only; do not edit application code inside the container.
 ## Review and lifecycle commands
 
 The Linux helper defaults to the non-mutating Compose validation action:

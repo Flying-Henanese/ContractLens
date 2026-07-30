@@ -25,6 +25,12 @@ def test_compose_targets_amd64_cuda_and_existing_service_port():
     assert "driver: nvidia" in compose
     assert "count: all" in compose
     assert "read_only: true" in compose
+    assert "PYTHONPATH: /app/src" in compose
+    assert "- --reload" in compose
+    assert "- --reload-dir" in compose
+    assert "- /app/src" in compose
+    assert "source: ./src" in compose
+    assert "target: /app/src" in compose
 
 
 def test_docker_build_context_excludes_user_data_and_local_environment():
