@@ -78,3 +78,39 @@ class PaddleXClient:
         if not isinstance(body, dict):
             raise PaddleXError(f"{context}：PaddleX 返回的 JSON 顶层不是对象")
         return body
+
+    async def parse_image(self, image: bytes) -> dict[str, Any]:
+        """Parse one image through the PaddleX layout-parsing service."""
+        payload = {
+            "file": base64.b64encode(image).decode("ascii"),
+            "fileType": 1,
+            "useLayoutDetection": self.settings.use_layout_detection,
+            "layoutThreshold": self.settings.layout_threshold,
+            "visualize": False,
+            "logId": "pdf-parser-image",
+        }
+        retryer = AsyncRetrying(
+            stop=stop_after_attempt(self.settings.retries + 1),
+            wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+            retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
+            reraise=True,
+        )
+        try:
+            async for attempt in retryer:
+                with attempt:
+                    response = await self._client.post(self.settings.inference_url, json=payload)
+        except (httpx.TransportError, httpx.TimeoutException) as exc:
+            raise PaddleXError(f"Image request to PaddleX failed: {exc}") from exc
+
+        context = "image"
+        body = self._decode_response(response, context=context)
+        if response.status_code != 200 or body.get("errorCode") != 0:
+            message = body.get("errorMsg") or f"HTTP {response.status_code}"
+            raise PaddleXError(f"Image parsing failed: {message}")
+
+        results = (body.get("result") or {}).get("layoutParsingResults") or []
+        if len(results) != 1:
+            raise PaddleXError(
+                f"Image response count mismatch: expected 1, received {len(results)}"
+            )
+        return results[0]

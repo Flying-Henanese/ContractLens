@@ -1,5 +1,7 @@
 # PDF Parser
 
+HTTP 文档解析接口支持 PDF 以及 BMP、JPEG/JPG、PNG、TIFF、WEBP 图像；DOC/DOCX 需先转换。详细调用方式见 [docs/api.md](docs/api.md)。
+
 FastAPI 服务的启动方式、接口路径和调用示例见 [`docs/api.md`](docs/api.md)。
 
 一个基于远端 PaddleX `layout-parsing` Pipeline 的 PDF 文档解析工具。项目当前只实现 Pipeline 模式，不依赖 VLM。

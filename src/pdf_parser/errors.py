@@ -6,5 +6,9 @@ class InvalidPdfError(PdfParserError):
     """The input PDF cannot be processed."""
 
 
+class InvalidImageError(PdfParserError):
+    """The input image cannot be processed."""
+
+
 class PaddleXError(PdfParserError):
     """The remote PaddleX service returned an invalid or failed response."""

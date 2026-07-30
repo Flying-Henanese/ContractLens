@@ -12,7 +12,8 @@ from pypdf.errors import PdfReadError
 
 from pdf_parser.clients.paddlex import PaddleXClient
 from pdf_parser.config import Settings
-from pdf_parser.errors import InvalidPdfError
+from pdf_parser.errors import InvalidImageError, InvalidPdfError
+from pdf_parser.ingestion.image import detect_image_format
 from pdf_parser.ingestion.pdf import iter_pdf_pages
 from pdf_parser.models import PageResult, ParseResponse, ResultData
 from pdf_parser.normalization.paddlex import normalize_page
@@ -22,6 +23,7 @@ ProgressCallback = Callable[[int, int], None]
 
 class PageClient(Protocol):
     async def parse_pdf_page(self, page_pdf: bytes, page_num: int) -> dict[str, Any]: ...
+    async def parse_image(self, image: bytes) -> dict[str, Any]: ...
 
 
 async def parse_pdf(
@@ -41,6 +43,33 @@ async def parse_pdf(
             page_results = await _parse_pages(pages, total_pages, settings, paddlex, progress)
 
     return ParseResponse(data=ResultData(doc_recognize_result=page_results))
+
+
+async def parse_image(
+    path: Path,
+    settings: Settings | None = None,
+    progress: ProgressCallback | None = None,
+    client: PageClient | None = None,
+) -> ParseResponse:
+    try:
+        image = path.read_bytes()
+    except OSError as exc:
+        raise InvalidImageError(f"Unable to read image: {path}") from exc
+    if detect_image_format(image) is None:
+        raise InvalidImageError("Unsupported or invalid image file")
+
+    settings = settings or Settings()
+    started_at = time.perf_counter()
+    if client is not None:
+        raw_page = await client.parse_image(image)
+    else:
+        async with PaddleXClient(settings) as paddlex:
+            raw_page = await paddlex.parse_image(image)
+
+    page_result = normalize_page(raw_page, page_num=1, started_at=started_at)
+    if progress:
+        progress(1, 1)
+    return ParseResponse(data=ResultData(doc_recognize_result=[page_result]))
 
 
 async def _parse_pages(

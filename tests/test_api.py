@@ -39,14 +39,35 @@ def test_document_route_is_sync_and_uses_300_second_timeout(monkeypatch):
     assert not inspect.iscoroutinefunction(_route("/api/v1/documents/parse").endpoint)
 
 
-def test_document_route_rejects_non_pdf_upload():
+def test_document_route_accepts_supported_image(monkeypatch):
+    observed = {}
+
+    async def fake_parse_image(path: Path, settings):
+        observed["content"] = path.read_bytes()
+        observed["timeout"] = settings.timeout_seconds
+        return ParseResponse(data=ResultData(doc_recognize_result=[]))
+
+    monkeypatch.setattr("pdf_parser.api.parse_image", fake_parse_image)
+    image = b"\x89PNG\r\n\x1a\nvalid-image"
+    response = client.post(
+        "/api/v1/documents/parse",
+        files={"file": ("sample.png", image, "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["code"] == "success"
+    assert observed["content"] == image
+    assert observed["timeout"] == DOCUMENT_TIMEOUT_SECONDS
+
+
+def test_document_route_rejects_invalid_image_upload():
     response = client.post(
         "/api/v1/documents/parse",
         files={"file": ("sample.png", b"image", "image/png")},
     )
 
-    assert response.status_code == 415
-    assert response.json()["detail"] == "仅支持上传PDF 文档"
+    assert response.status_code == 400
+    assert response.json()["detail"] == "上传文件不是有效的受支持图像"
 
 
 def test_document_route_rejects_empty_file():
@@ -99,7 +120,7 @@ def test_receipt_route_rejects_unsupported_file_type():
     )
 
     assert response.status_code == 415
-    assert response.json()["detail"] == "仅支持上传PDF 或图片票据"
+    assert response.json()["detail"] == "仅支持上传PDF 或图像票据"
 
 
 def _route(path: str) -> APIRoute:
