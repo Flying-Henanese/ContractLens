@@ -34,4 +34,6 @@ curl.exe -X POST "http://127.0.0.1:8888/api/v1/documents/parse" `
   -F "file=@page.png;type=image/png"
 ```
 
+可通过 `.env` 启用印章 VLM 兜底；地址、模型、30 秒单次超时、最多 5 次尝试及 OCR 触发阈值见 `.env.template`。该能力默认关闭，只处理 PaddleX 已检测到的印章；VLM 不可读、结果不一致、超时或失败时继续返回 PaddleX 内容。开启后仍受文档接口 300 秒整体超时限制。
+
 交互式接口文档位于 `http://127.0.0.1:8888/docs`。

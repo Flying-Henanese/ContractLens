@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable, Iterator
+from contextlib import AsyncExitStack
 from itertools import islice
 from pathlib import Path
 from typing import Any, Protocol
@@ -11,12 +12,14 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from pdf_parser.clients.paddlex import PaddleXClient
+from pdf_parser.clients.vlm import VLMClient
 from pdf_parser.config import Settings
 from pdf_parser.errors import InvalidImageError, InvalidPdfError
 from pdf_parser.ingestion.image import detect_image_format
 from pdf_parser.ingestion.pdf import iter_pdf_pages
 from pdf_parser.models import PageResult, ParseResponse, ResultData
 from pdf_parser.normalization.paddlex import normalize_page
+from pdf_parser.normalization.seal_fallback import SealRecognizer, apply_seal_fallback
 
 ProgressCallback = Callable[[int, int], None]
 
@@ -31,16 +34,31 @@ async def parse_pdf(
     settings: Settings | None = None,
     progress: ProgressCallback | None = None,
     client: PageClient | None = None,
+    vlm_client: SealRecognizer | None = None,
 ) -> ParseResponse:
     settings = settings or Settings()
     total_pages = _count_pages(path)
     pages = iter_pdf_pages(path)
 
-    if client is not None:
-        page_results = await _parse_pages(pages, total_pages, settings, client, progress)
-    else:
-        async with PaddleXClient(settings) as paddlex:
-            page_results = await _parse_pages(pages, total_pages, settings, paddlex, progress)
+    async with AsyncExitStack() as stack:
+        page_client = client
+        if page_client is None:
+            page_client = await stack.enter_async_context(PaddleXClient(settings))
+
+        seal_client: SealRecognizer | None = None
+        if settings.vlm_enabled:
+            seal_client = vlm_client
+            if seal_client is None:
+                seal_client = await stack.enter_async_context(VLMClient(settings))
+
+        page_results = await _parse_pages(
+            pages,
+            total_pages,
+            settings,
+            page_client,
+            seal_client,
+            progress,
+        )
 
     return ParseResponse(data=ResultData(doc_recognize_result=page_results))
 
@@ -50,6 +68,7 @@ async def parse_image(
     settings: Settings | None = None,
     progress: ProgressCallback | None = None,
     client: PageClient | None = None,
+    vlm_client: SealRecognizer | None = None,
 ) -> ParseResponse:
     try:
         image = path.read_bytes()
@@ -60,13 +79,27 @@ async def parse_image(
 
     settings = settings or Settings()
     started_at = time.perf_counter()
-    if client is not None:
-        raw_page = await client.parse_image(image)
-    else:
-        async with PaddleXClient(settings) as paddlex:
-            raw_page = await paddlex.parse_image(image)
+    async with AsyncExitStack() as stack:
+        page_client = client
+        if page_client is None:
+            page_client = await stack.enter_async_context(PaddleXClient(settings))
 
-    page_result = normalize_page(raw_page, page_num=1, started_at=started_at)
+        seal_client: SealRecognizer | None = None
+        if settings.vlm_enabled:
+            seal_client = vlm_client
+            if seal_client is None:
+                seal_client = await stack.enter_async_context(VLMClient(settings))
+
+        raw_page = await page_client.parse_image(image)
+        page_result = normalize_page(raw_page, page_num=1, started_at=started_at)
+        if seal_client is not None:
+            page_result = await apply_seal_fallback(
+                page_result,
+                raw_page,
+                seal_client,
+                ocr_threshold=settings.vlm_seal_ocr_threshold,
+            )
+
     if progress:
         progress(1, 1)
     return ParseResponse(data=ResultData(doc_recognize_result=[page_result]))
@@ -77,12 +110,22 @@ async def _parse_pages(
     total_pages: int,
     settings: Settings,
     client: PageClient,
+    seal_client: SealRecognizer | None,
     progress: ProgressCallback | None,
 ) -> list[PageResult]:
     results: list[PageResult] = []
     while batch := list(islice(pages, settings.concurrency)):
         parsed = await asyncio.gather(
-            *(_parse_one(client, page_num, page_pdf) for page_num, page_pdf in batch)
+            *(
+                _parse_one(
+                    client,
+                    seal_client,
+                    settings.vlm_seal_ocr_threshold,
+                    page_num,
+                    page_pdf,
+                )
+                for page_num, page_pdf in batch
+            )
         )
         results.extend(parsed)
         if progress:
@@ -91,10 +134,24 @@ async def _parse_pages(
     return results
 
 
-async def _parse_one(client: PageClient, page_num: int, page_pdf: bytes) -> PageResult:
+async def _parse_one(
+    client: PageClient,
+    seal_client: SealRecognizer | None,
+    ocr_threshold: float,
+    page_num: int,
+    page_pdf: bytes,
+) -> PageResult:
     started_at = time.perf_counter()
     raw_page = await client.parse_pdf_page(page_pdf, page_num)
-    return normalize_page(raw_page, page_num, started_at)
+    page_result = normalize_page(raw_page, page_num, started_at)
+    if seal_client is None:
+        return page_result
+    return await apply_seal_fallback(
+        page_result,
+        raw_page,
+        seal_client,
+        ocr_threshold=ocr_threshold,
+    )
 
 
 def _count_pages(path: Path) -> int:

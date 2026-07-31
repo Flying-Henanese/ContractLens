@@ -12,3 +12,7 @@ class InvalidImageError(PdfParserError):
 
 class PaddleXError(PdfParserError):
     """The remote PaddleX service returned an invalid or failed response."""
+
+
+class VLMError(PdfParserError):
+    """The optional VLM service returned an invalid or failed response."""

@@ -4,7 +4,7 @@ HTTP 文档解析接口支持 PDF 以及 BMP、JPEG/JPG、PNG、TIFF、WEBP 图�
 
 FastAPI 服务的启动方式、接口路径和调用示例见 [`docs/api.md`](docs/api.md)。
 
-一个基于远端 PaddleX `layout-parsing` Pipeline 的 PDF 文档解析工具。项目当前只实现 Pipeline 模式，不依赖 VLM。
+一个以远端 PaddleX `layout-parsing` Pipeline 为主链路的 PDF 文档解析工具；可选启用印章级 VLM 兜底。
 
 ## 已实现
 
@@ -14,6 +14,7 @@ FastAPI 服务的启动方式、接口路径和调用示例见 [`docs/api.md`](d
 - 输出正文、版面类型、边界框、阅读顺序、OCR/印章文本和处理耗时。
 - 保留表格 HTML，并将每枚物理印章结构化为可定位的独立元素。
 - 提供独立的 JSON 后处理模块，用于识别可能延续到下一页的表格。
+- 可选对已检测但 OCR 文字缺失或低置信度的印章执行 VLM 双视图复核。
 
 ## 安装
 
@@ -21,7 +22,7 @@ FastAPI 服务的启动方式、接口路径和调用示例见 [`docs/api.md`](d
 uv sync
 ```
 
-默认服务地址为 `http://192.168.0.194:8080`。
+默认 PaddleX 服务地址为 `http://192.168.0.67:8880`；印章 VLM 兜底默认关闭。
 
 ## 使用
 
@@ -69,12 +70,23 @@ Copy-Item .env.template .env
 也可以在当前 PowerShell 会话中直接设置：
 
 ```powershell
-$env:PDF_PARSER_ENDPOINT = "http://192.168.0.194:8080"
+$env:PDF_PARSER_ENDPOINT = "http://192.168.0.67:8880"
 $env:PDF_PARSER_TIMEOUT_SECONDS = "180"
 $env:PDF_PARSER_USE_LAYOUT_DETECTION = "true"
 $env:PDF_PARSER_LAYOUT_THRESHOLD = "0.5"
 # 如确实需要让请求继承系统 HTTP(S) 代理：
 $env:PDF_PARSER_TRUST_ENV = "true"
+```
+
+印章 VLM 兜底通过环境变量启用。它只处理 PaddleX 已检测到，但印章 OCR 文字为空、缺少分数或分数低于阈值的元素；未检测到的印章不做整页复查。原始裁剪图与红色隔离视图必须得到一致的完整文字才会采用，否则保留 PaddleX 结果：
+
+```powershell
+$env:PDF_PARSER_VLM_ENABLED = "true"
+$env:PDF_PARSER_VLM_ENDPOINT = "http://192.168.0.194:8000"
+$env:PDF_PARSER_VLM_MODEL = "qwen3.6-27b"
+$env:PDF_PARSER_VLM_TIMEOUT_SECONDS = "30"
+$env:PDF_PARSER_VLM_MAX_ATTEMPTS = "5"
+$env:PDF_PARSER_VLM_SEAL_OCR_THRESHOLD = "0.9"
 ```
 
 CLI 参数优先于环境变量。默认不继承系统代理，避免内网 PaddleX 地址被错误发送到代理服务器。

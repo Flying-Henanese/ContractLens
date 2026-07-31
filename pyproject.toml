@@ -11,6 +11,7 @@ dependencies = [
     "fastapi>=0.140.0",
     "httpx>=0.28",
     "orjson>=3.10",
+    "pillow>=11.0",
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
     "pypdf>=5.0",
