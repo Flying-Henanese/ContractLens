@@ -16,10 +16,11 @@
 
 - 请求或响应形状：`tests/test_client.py`
 - PDF 输入与校验：`tests/test_ingestion.py`
+- 图像输入、签名和远端请求：`tests/test_image_input.py`
 - 归一化、表格和印章：`tests/test_normalization.py`
 - 文档编排、失败和页序：`tests/test_service.py`
 - 跨页表格：`tests/test_cross_page_tables.py`
-- CLI 或 API：对应 CLI/API 测试
+- CLI 或 API（包括文档类型路由）：对应 CLI/API 测试
 - Harness 脚本与结构：`tests/test_harness.py`
 
 先在最接近不变量的层修复根因，再更新调用方。用户可见行为变化同步 README；稳定架构变化同步 `architecture/`；远端观测只更新 `operations/`。

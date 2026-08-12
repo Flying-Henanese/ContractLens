@@ -31,6 +31,10 @@
 | 性能基准和专项调研 | [`reports/`](reports/) |
 | 可重复机械反馈 | [`scripts/`](scripts/) |
 
+`src/pdf_parser/models.py` 定义生产 Pydantic 结构；`scripts/validate_result.py` 是更严格的真实
+烟测质量门槛，不是该模型的同义实现。具体差异和结论措辞见
+[`workflows/remote-validation.md`](workflows/remote-validation.md)。
+
 代码、测试和文档不一致时，不凭文档猜测。先用实现、测试和实际协议证据确认，再修正对应的唯一权威文件。Active plan 可以描述尚未落地的目标状态，但必须明确当前事实和拟替代的不变量。
 
 ## 最短反馈回路
