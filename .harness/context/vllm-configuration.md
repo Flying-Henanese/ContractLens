@@ -72,12 +72,17 @@ CUDA 使用 `VLM_GPU_IDS`，昇腾使用 `VLM_NPU_IDS`。入口脚本会拒绝�
 - 并行后端不是 `mp` 或 `ray`。
 - 可见设备数量与数据并行实例数不一致。
 
+这些检查发生在容器启动时；`docker compose config` 只做 Compose 解析，不执行
+entrypoint，因此数量不一致的配置仍可能通过静态 Compose 检查。
+
 ## 设备隔离
 
-- Pipeline GPU/NPU 与 VLM GPU/NPU 必须分离。
+- Pipeline GPU/NPU 与 VLM GPU/NPU 按部署约束应当分离。
 - CUDA 通过 `CUDA_VISIBLE_DEVICES` 暴露物理 GPU。
 - 昇腾通过 `ASCEND_RT_VISIBLE_DEVICES` 暴露物理 NPU。
 - 容器内设备会重新编号，Pipeline 使用 `gpu:0` 或 `npu:0` 是预期行为。
+- `start_vl.sh` 会检查 CUDA 设备重叠；CUDA 和昇腾 Compose 当前不会交叉比较
+  Pipeline 与 VLM 设备列表，需由部署者预检。
 
 ## 修改验证
 

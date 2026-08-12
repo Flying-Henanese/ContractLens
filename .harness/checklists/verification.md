@@ -34,6 +34,9 @@ docker compose \
 
 在目标服务器具备相应运行环境时检查：
 
+- 记录实际镜像 ID/digest 以及 PaddleOCR、PaddleX、vLLM 版本；`latest-*` 标签
+  本身不足以标识已验证运行时。
+
 ```bash
 curl --fail http://127.0.0.1:8880/health
 curl --fail http://127.0.0.1:8880/openapi.json
@@ -48,9 +51,11 @@ curl --fail http://127.0.0.1:8880/openapi.json
 ## 性能改动
 
 - 保留输入文件、请求数、并发数和预热次数。
-- 对比单实例与多实例、低文档并发与高文档并发。
-- 记录外层请求并发、子图并发和 vLLM 调度参数。
-- 记录 `use_queues`、`layout_prep_cpu_workers` 和前道可用 CPU 核数。
+- 对比单实例与多实例、低客户端压力与高客户端压力；普通 `paddlex --serve`
+  下不要把 `scripts/benchmark.py --concurrency` 直接解释为服务端文档并行度。
+- 记录客户端并发、服务端实际同时执行的请求数、子图并发和 vLLM 调度参数。
+- 记录 `use_queues`、`layout_prep_cpu_workers`、前道可用 CPU 核数，并从目标
+  PaddleX 版本或运行指标确认 `layout_prep_cpu_workers` 是否真正生效。
 - 记录端到端延迟、尾延迟、成功率、请求吞吐、页吞吐以及前道和各 VLM
   设备利用率。
 - 检查版面块 CPU 准备阶段是否积压，并观察前道 CPU 利用率和内存占用。

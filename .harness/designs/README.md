@@ -6,7 +6,8 @@
 ## 当前设计
 
 - `2026-07-25-use-queues-pipeline.md`：解释 `use_queues` 启用的输入、CV、VLM
-  内部队列流水线，以及它和外层并发、vLLM 并行之间的关系。
+  内部队列流水线、`layout_prep_cpu_workers` 的运行时版本依赖，以及它们和
+  客户端请求压力、vLLM 并行之间的关系。
 
 文件名：
 

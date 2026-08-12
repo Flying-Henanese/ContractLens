@@ -14,8 +14,13 @@ layout_prep_cpu_workers: 16
 
 - `batch_size: 64`：Pipeline 顶层批处理配置。
 - `use_queues: True`：启用输入、CV 和 VLM 阶段之间的内部队列流水线。
-- `layout_prep_cpu_workers: 16`：使用 16 个 CPU worker 并行完成版面块裁剪、
-  合并、过滤及 VLM 请求构造。
+- `layout_prep_cpu_workers: 16`：这是运行时版本依赖项。支持该字段的 PaddleX
+  以页面为任务并行完成过滤、裁剪、合并和 VLM 输入构造，实际 worker 数不超过
+  当前页面数；不支持该字段的版本会忽略它。
+
+本仓库的 CUDA 与昇腾镜像使用 `latest-*` 标签，无法仅从仓库锁定其中的
+PaddleX 实现。启动目标镜像后应记录 PaddleX 版本，并通过源码、日志或性能指标
+确认 `layout_prep_cpu_workers` 是否生效。不要把 YAML 中存在该字段作为生效证据。
 
 `use_queues` 和 CPU 准备阶段的详细设计见
 `../designs/2026-07-25-use-queues-pipeline.md`。
@@ -132,3 +137,5 @@ Serving:
 - Markdown 的页眉、页脚、页码和脚注过滤符合预期。
 - 并发请求下无队列阻塞、串页或结果交叉。
 - 前道 CPU、Pipeline GPU/NPU 和 VLM 设备负载符合预期。
+- 如果验证 `layout_prep_cpu_workers`，使用多页输入并确认目标版本确实创建页面
+  准备线程池；单页输入不会形成多个页面准备 worker。
