@@ -16,6 +16,7 @@ dist
 docs
 output
 resources
+paddleocr-server
 tests
 tmp
 Dockerfile*

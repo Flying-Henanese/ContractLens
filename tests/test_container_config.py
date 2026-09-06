@@ -30,15 +30,13 @@ def test_ascend_dockerfile_is_multi_arch_and_separates_build_from_runtime():
     assert 'ENTRYPOINT ["pdf-parser-api"]' in runtime
 
 
-def test_compose_is_shared_across_cuda_and_ascend_hosts():
+def test_unified_cuda_compose_starts_gateway_and_inference_stack_together():
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
     assert "dockerfile: ${PDF_PARSER_DOCKERFILE:-Dockerfile}" in compose
     assert 'CUDA_VERSION: "12.2.2"' in compose
     assert '"${PDF_PARSER_PORT:-8888}:8888"' in compose
     assert "platform:" not in compose
-    assert "driver: nvidia" not in compose
-    assert "/dev/davinci" not in compose
     assert "read_only: true" in compose
     assert "PYTHONPATH: /app/src" in compose
     assert "- --reload" in compose
@@ -46,6 +44,23 @@ def test_compose_is_shared_across_cuda_and_ascend_hosts():
     assert "- /app/src" in compose
     assert "source: ./src" in compose
     assert "target: /app/src" in compose
+    assert "paddleocr-vlm-server:" in compose
+    assert "paddleocr-vl-api:" in compose
+    assert "http://paddleocr-vl-api:8080" in compose
+    assert "paddleocr-vl-api:" in compose.split("depends_on:", maxsplit=1)[1]
+    assert "./paddleocr-server/PaddleOCR-VL-1.6.yaml" in compose
+    assert "./paddleocr-server/vllm_config.yaml" in compose
+
+
+def test_unified_ascend_compose_keeps_gateway_and_inference_in_one_lifecycle():
+    compose = (ROOT / "compose.ascend.yaml").read_text(encoding="utf-8")
+
+    assert "api:" in compose
+    assert "paddleocr-vlm-server:" in compose
+    assert "paddleocr-vl-api:" in compose
+    assert "http://paddleocr-vl-api:8080" in compose
+    assert "ASCEND_RT_VISIBLE_DEVICES" in compose
+    assert "./paddleocr-server/docker/vlm-entrypoint-ascend.sh" in compose
 
 
 def test_docker_build_context_excludes_user_data_and_local_environment():
@@ -55,6 +70,7 @@ def test_docker_build_context_excludes_user_data_and_local_environment():
     assert "resources" in dockerignore
     assert "output" in dockerignore
     assert ".venv" in dockerignore
+    assert "paddleocr-server" in dockerignore
 
 
 def test_linux_docker_helper_wraps_expected_compose_actions():
@@ -65,4 +81,6 @@ def test_linux_docker_helper_wraps_expected_compose_actions():
     for action in ("config", "build", "up", "down", "restart", "logs", "ps"):
         assert f"    {action})" in helper
     assert "docker compose" in helper
+    assert "CONTRACTLENS_PLATFORM" in helper
+    assert "compose.ascend.yaml" in helper
     assert not (ROOT / "scripts" / "docker.ps1").exists()

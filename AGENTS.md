@@ -4,10 +4,14 @@
 
 ## 1. 项目边界
 
-本项目是远端 PaddleX `PP-StructureV3` / `layout-parsing` Pipeline 的 PDF 文档解析客户端。模型推理在远端完成；本仓库负责 PDF 输入、HTTP 调用、结果归一化和兼容 JSON 输出。
+本项目包含两个保持独立职责的模块：根目录 `src/pdf_parser/` 是 PaddleX
+`layout-parsing` Pipeline 的 PDF 文档解析网关；`paddleocr-server/` 是已导入的
+PaddleOCR-VL 推理配置模块。根目录 Compose 会一起编排网关、PaddleX 和 vLLM；模型推理
+仍不在网关代码或网关镜像中完成。
 
-- 当前版本只使用 PaddleX Pipeline 模式。
-- 未经用户明确要求，不引入 VLM、多模态模型或外部 LLM。
+- 网关只通过 PaddleX Pipeline 协议调用推理模块，不直接调用 vLLM 或其他模型接口。
+- `paddleocr-server/` 的 VLM、多模态模型和硬件配置属于推理模块；未经用户明确要求，
+  不改变其模型、镜像、设备拓扑或 Pipeline 行为。
 - 不把 HTTP、PDF 输入、归一化、服务编排和 CLI/API 逻辑混入同一模块。
 - 不把样例 JSON 当作绝对真值；其中可能包含 OCR 错字、坐标差异或模型幻觉。
 
@@ -29,7 +33,8 @@
 ## 3. 开发环境
 
 - Windows / PowerShell，Python `>=3.11`，依赖和虚拟环境使用 `uv`。
-- 默认 PaddleX 地址为 `http://192.168.0.194:8080`。
+- 统一 Compose 中网关的 PaddleX 地址固定为 `http://paddleocr-vl-api:8080`；独立运行时
+  通过 `PDF_PARSER_ENDPOINT` 明确指定可访问的服务地址。
 - 默认关闭 `httpx` 系统代理继承，避免内网请求进入 `HTTP_PROXY`。
 - 不直接使用系统 `pip`；依赖通过 `uv add`、`uv add --dev` 和 `uv sync` 管理。
 - 源码、Markdown 和 JSON 使用 UTF-8，不因控制台乱码转换为 GBK。
@@ -67,7 +72,8 @@
 - 远端项目目录固定为 `/home/mineru_dev/projects/ContractLens`。
 - 影响 FastAPI、PaddleX 请求、归一化或输出契约的改动，在本地门槛通过后按远端部署工作流验证。
 - 部署前必须检查远端分支和工作区；存在未提交改动时停止，不得强制覆盖、清理或重置。
-- T4 上的 FastAPI 使用 Docker Compose 管理。部署时先在项目目录执行 `git pull --ff-only`，
-  再依次验证 Compose 配置、构建镜像并更新容器；宿主机不运行 `uv sync`。
-- 使用仓库的 `scripts/docker.sh` 管理容器，不得用 `pkill`、递归删除或临时后台进程
+- T4 上的网关、PaddleX 和 vLLM 使用根目录 Docker Compose 作为同一生命周期管理。部署时先
+  在项目目录执行 `git pull --ff-only`，再依次验证 Compose 配置、构建镜像并更新整套容器；
+  宿主机不运行 `uv sync`。
+- 使用仓库的 `scripts/docker.sh` 管理整套容器，不得用 `pkill`、递归删除或临时后台进程
   冒充可靠重启。

@@ -1,15 +1,22 @@
-# Docker Compose deployment
+# Unified Docker Compose deployment
 
-The FastAPI client can be built for either the existing CUDA 12.2 environment or a
-Huawei Ascend host. Both deployments use the same `compose.yaml`; only the selected
-Dockerfile and image tag change.
+The repository contains the ContractLens gateway and an imported
+`paddleocr-server` inference module. A single root Compose command manages their
+shared lifecycle:
 
-Containerization does not move PaddleX inference into this repository. The service
-continues to call the remote `layout-parsing` Pipeline configured by
-`PDF_PARSER_ENDPOINT`, so the application container does not consume a local GPU or
-NPU.
+1. `paddleocr-vlm-server` starts the PaddleOCR-VL vLLM replicas;
+2. `paddleocr-vl-api` waits for the model process, starts PaddleX, and exposes
+   `/layout-parsing` on container port `8080`; and
+3. `api` waits for PaddleX health, then exposes the ContractLens document API on
+   port `8888`.
 
-## Image designs
+The gateway uses `http://paddleocr-vl-api:8080` only inside the Compose network.
+`API_PORT` (default `8880`) is a host mapping for operator access and must not be
+used as the internal URL. The CUDA Compose also retains `VLM_PORT` (default `8118`)
+from the imported inference configuration. These raw ports are preserved for this
+initial integration and must be reviewed before an Internet-facing release.
+
+## Gateway images
 
 ### CUDA
 
@@ -24,17 +31,19 @@ The default `Dockerfile` uses two CUDA stages:
 
 `Dockerfile.ascend` uses a multi-stage Ubuntu base and supports Docker's native
 `linux/amd64` and `linux/arm64` builds. It intentionally does not install CANN,
-Ascend drivers, or Paddle NPU packages because this container performs no local model
-inference. `ASCEND_BASE_IMAGE` can replace the default `ubuntu:22.04` base when an
-organization requires an approved internal Ubuntu-derived image.
+Ascend drivers, or Paddle NPU packages because inference stays in the imported
+PaddleOCR module. `ASCEND_BASE_IMAGE` can replace the default `ubuntu:22.04` base
+when an organization requires an approved internal Ubuntu-derived image.
 
-Both final images run as UID/GID `10001`, use a read-only root filesystem, and write
-temporary uploaded PDFs under the `/tmp` tmpfs.
+Both final gateway images run as UID/GID `10001`, use a read-only root filesystem,
+and write temporary uploaded PDFs under the `/tmp` tmpfs.
 
-## Shared Compose configuration
+## Compose configuration
 
-Compose reads `.env`. Start from `.env.template` and review the remote endpoint plus
-the container settings.
+Compose reads `.env`. Start from `.env.template` and review the gateway, inference
+device, image, and model-cache settings. The gateway's Compose-only endpoint is
+`PDF_PARSER_DOCKER_ENDPOINT=http://paddleocr-vl-api:8080`; it intentionally differs
+from `PDF_PARSER_ENDPOINT`, which remains for standalone CLI/FastAPI use.
 
 The default CUDA selection is:
 
@@ -43,59 +52,61 @@ PDF_PARSER_DOCKERFILE=Dockerfile
 PDF_PARSER_IMAGE=pdf-parser:cuda12.2
 PDF_PARSER_PORT=8888
 PDF_PARSER_TMPFS_SIZE=2g
+PADDLEX_CACHE_DIR=/home/mineru_dev/.paddlex
+PIPELINE_GPU_ID=4
+VLM_GPU_IDS=5,6
+VLM_DATA_PARALLEL_SIZE=2
 ```
 
-For an Ascend host, change only the image selection:
+For an Ascend host, use `compose.ascend.yaml` through the lifecycle helper and set
+the Ascend-specific gateway image and inference device values:
 
 ```dotenv
-PDF_PARSER_DOCKERFILE=Dockerfile.ascend
-PDF_PARSER_IMAGE=pdf-parser:ascend-ubuntu22.04
+PDF_PARSER_ASCEND_DOCKERFILE=Dockerfile.ascend
+PDF_PARSER_ASCEND_IMAGE=pdf-parser:ascend-ubuntu22.04
 ASCEND_BASE_IMAGE=ubuntu:22.04
+PIPELINE_NPU_ID=0
+VLM_NPU_IDS=1,2
 ```
 
-`compose.yaml` does not set `platform`, so Docker builds for the host's native CPU
-architecture. It also does not reserve NVIDIA or Ascend devices: neither is used by
-this remote-inference client. This is what makes the application service, ports,
-environment, security settings, source mount, health check, and lifecycle commands
-shareable across both hosts.
-
-If local NPU inference is added in the future, it will require an Ascend-specific
-Compose override for device nodes, driver libraries, and CANN settings; the current
-shared file must not be assumed sufficient for that different architecture.
+`compose.yaml` is the CUDA topology. `compose.ascend.yaml` keeps the imported
+inference module's verified NPU driver mounts, `privileged` setting, and device
+environment variables. Do not run the CUDA file on Ascend or the Ascend file on a
+CUDA host.
 
 ## Host prerequisites
 
 For either host, confirm:
 
 1. Docker Engine and Docker Compose v2 are installed;
-2. the host can pull the selected base images and Python dependencies;
-3. the container can reach `PDF_PARSER_ENDPOINT`;
-4. an ARM64 Ascend host builds natively rather than forcing `linux/amd64` emulation.
-
-No NVIDIA Container Toolkit, Ascend Docker Runtime, or NPU device mapping is required
-for this client container.
+2. the host can pull the selected images;
+3. the target host has the appropriate NVIDIA or Ascend container support and device
+   drivers for the selected inference topology;
+4. the PaddleX model-cache path exists and must not be cleared by deployment; and
+5. an ARM64 Ascend host builds the gateway natively rather than forcing
+   `linux/amd64` emulation.
 
 ## Active-iteration source mount
 
-`compose.yaml` bind-mounts `./src` read-only at `/app/src`, sets
-`PYTHONPATH=/app/src`, and starts Uvicorn with reload restricted to that directory.
-Python source changes are therefore detected without rebuilding the image.
+Both Compose files bind-mount `./src` read-only at `/app/src`, set
+`PYTHONPATH=/app/src`, and start Uvicorn with reload restricted to that directory.
+Python source changes are therefore detected without rebuilding the gateway image.
 
 The mount does not replace the image-managed Python interpreter or locked
-dependencies. Changes to `pyproject.toml`, `uv.lock`, either Dockerfile,
-`compose.yaml`, or environment configuration require a rebuild or container
-recreation.
+dependencies. Changes to `pyproject.toml`, `uv.lock`, either Dockerfile, either
+Compose file, the imported inference configuration, or environment configuration
+require a rebuild or container recreation.
 
 ## Review and lifecycle commands
 
-The Linux helper defaults to non-mutating validation:
+The Linux helper defaults to CUDA and non-mutating validation:
 
 ```bash
 bash scripts/docker.sh
 bash scripts/docker.sh config
 ```
 
-Build and start the Dockerfile selected by `.env`:
+Build and start the gateway, PaddleX, and vLLM together:
 
 ```bash
 bash scripts/docker.sh build
@@ -104,14 +115,22 @@ bash scripts/docker.sh ps
 bash scripts/docker.sh logs
 ```
 
-Other supported actions are `restart` and `down`. The health check requests
-`http://127.0.0.1:8888/openapi.json` inside the container. The external API is
-available at `http://<host>:${PDF_PARSER_PORT}`.
+Other supported actions are `restart` and `down`. The gateway health check requests
+`http://127.0.0.1:8888/openapi.json` inside its container. The external document API
+is available at `http://<host>:${PDF_PARSER_PORT}`.
+
+For Ascend, prefix the same command with `CONTRACTLENS_PLATFORM=ascend`:
+
+```bash
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
+```
 
 ## T4 rollout
 
-The T4 server continues to use the default CUDA selection. Deployment must still
-follow the repository remote workflow: inspect the remote branch and worktree, pull
-with `--ff-only`, validate Compose, rebuild when container inputs change, update the
-service, inspect health and logs, and run the real smoke test. Dependency
-synchronization happens inside the image build; do not run `uv sync` on the host.
+The T4 server uses the CUDA selection unless the deployment owner explicitly selects
+Ascend. Deployment must still follow the repository remote workflow: inspect the
+remote branch and worktree, pull with `--ff-only`, validate Compose, update the
+three-process stack together, inspect all health checks and logs, and run a real
+parse smoke test. Dependency synchronization happens inside the gateway image build;
+do not run `uv sync` on the host.

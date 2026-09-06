@@ -2,8 +2,10 @@
 
 ## 系统边界与当前数据流
 
-本仓库不承载模型推理。文档 API 当前接受 PDF 或受支持图像；CLI 仍只接受 PDF。PDF 仍采用
-逐页远端请求，整份 PDF 提交是 active plan 中尚未落地的目标状态。
+网关代码不承载模型推理：文档 API 当前接受 PDF 或受支持图像；CLI 仍只接受 PDF。根目录
+Compose 现在同时启动网关、`paddleocr-server/` 中的 PaddleX Pipeline 和其 vLLM 进程，网关通过
+Compose 服务 DNS `http://paddleocr-vl-api:8080` 请求 Pipeline。PDF 仍采用逐页远端请求，整份
+PDF 提交是 active plan 中尚未落地的目标状态。
 
 ```text
 本地 PDF
@@ -27,6 +29,10 @@
 
 跨页表格候选检测是对已生成结果 JSON 的独立只读分析，不在上述主解析链路中。
 
+部署链路为 `api -> paddleocr-vl-api -> paddleocr-vlm-server`：`api` 等待 Pipeline 健康，
+Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `compose.ascend.yaml`（Ascend）
+一起启动、重启和停止。推理配置保持在 `paddleocr-server/`，而不是复制到网关 Python 模块中。
+
 正文回退、普通元素/印章坐标和印章去重能力等稳定行为只在 [`invariants.md`](invariants.md)
 定义，本页不复制规则细节。
 
@@ -46,5 +52,7 @@
 | 跨页表格候选检测 | `src/pdf_parser/cross_page_tables.py` | `tests/test_cross_page_tables.py` |
 | 最终 JSON 类型和字段 | `src/pdf_parser/models.py` | 归一化、服务和 harness 验证测试 |
 | 用户可见领域异常 | `src/pdf_parser/errors.py` | 最接近异常来源的测试 |
+| PaddleX Pipeline、vLLM、CUDA/Ascend 设备与推理镜像配置 | `paddleocr-server/` | 推理模块静态检查与目标硬件验证 |
+| 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py` |
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。

@@ -66,6 +66,24 @@ implementation to change without spreading its details into business callers.
   target inference module can return all PDF pages in one request, while the
   gateway currently submits one page at a time.
 
+## Current implementation scope
+
+The user requested an initial glue-only delivery because Docker, model, and
+target hardware validation are unavailable in the current environment. This
+delivery intentionally implements only the following reversible subset:
+
+1. preserve the `paddleocr-server` Git history under the literal
+   `paddleocr-server/` directory in this repository;
+2. extend the root CUDA and Ascend Compose files to start the gateway, PaddleX,
+   and vLLM in one `up`/`down` lifecycle; and
+3. route the gateway container to `paddleocr-vl-api:8080` through Compose DNS.
+
+It does not yet move the gateway into `apps/gateway`, rename environment
+variables, extract a protocol-contract module, change PDF submission granularity,
+pin images, or restrict raw inference ports. The imported provider's existing
+host ports remain available pending target-server verification. Those deferred
+items are the later stages of this plan, not completed architecture facts.
+
 ## Target architecture
 
 ```text
@@ -406,6 +424,14 @@ part of rollback. There is no persistent application data migration to reverse.
 - 2026-09-07: Captured current gateway/provider relationship and created this
   target design. No production code, configuration, image, remote deployment,
   or user document was changed.
+- 2026-09-07: Created `codex/unify-inference-stack`, imported the
+  `paddleocr-server` main history as `paddleocr-server/`, and added root CUDA
+  and Ascend Compose topologies. The gateway depends on the PaddleX healthcheck
+  and receives the internal `http://paddleocr-vl-api:8080` endpoint; PaddleX
+  depends on the vLLM healthcheck. `scripts/docker.sh` selects the CUDA or
+  Ascend topology through `CONTRACTLENS_PLATFORM`. This is a glue-only change:
+  Docker, Compose configuration parsing, hardware startup, and real parsing
+  have not been run in the current environment.
 
 ## Unexpected findings
 

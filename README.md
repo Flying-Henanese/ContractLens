@@ -4,7 +4,9 @@ HTTP 文档解析接口支持 PDF 以及 BMP、JPEG/JPG、PNG、TIFF、WEBP 图�
 
 FastAPI 服务的启动方式、接口路径和调用示例见 [`docs/api.md`](docs/api.md)。
 
-一个基于远端 PaddleX `layout-parsing` Pipeline 的 PDF 文档解析工具。项目当前只实现 Pipeline 模式，不依赖 VLM。
+一个基于 PaddleX `layout-parsing` Pipeline 的 PDF 文档解析工具。根目录的统一 Docker
+Compose 同时编排本项目的 FastAPI 网关、PaddleX Pipeline 和 PaddleOCR-VL/vLLM 推理进程；
+网关仍只负责输入校验、远端调用和兼容 JSON 归一化，不在自身容器中执行模型推理。
 
 ## 已实现
 
@@ -21,7 +23,41 @@ FastAPI 服务的启动方式、接口路径和调用示例见 [`docs/api.md`](d
 uv sync
 ```
 
-默认服务地址为 `http://192.168.0.194:8080`。
+独立运行 CLI 或 FastAPI 时，需要通过 `PDF_PARSER_ENDPOINT` 配置可访问的 PaddleX 服务地址。
+
+## 统一 Docker Compose 部署
+
+`paddleocr-server/` 是已导入的 PaddleOCR-VL 推理模块，保留其 CUDA、Ascend、Pipeline 和
+vLLM 配置。根目录 Compose 将下列三个进程作为同一个项目启动和停止：
+
+```text
+api                       对外文档接口，默认端口 8888
+paddleocr-vl-api          PaddleX layout-parsing Pipeline，默认端口 8880
+paddleocr-vlm-server      PaddleOCR-VL vLLM 后端，默认端口 8118（CUDA）
+```
+
+网关在 Compose 网络内固定通过 `http://paddleocr-vl-api:8080` 调用 Pipeline；这里的
+`8080` 是 Pipeline 容器端口，不能替换为宿主机端口 `8880`。因此同一条命令会等待
+vLLM、Pipeline 和网关按依赖顺序启动，`down` 也会停止整套栈。
+
+复制环境模板后，请确认设备编号、模型缓存路径和镜像标签与目标服务器一致：
+
+```bash
+cp .env.template .env
+bash scripts/docker.sh config
+bash scripts/docker.sh up
+bash scripts/docker.sh ps
+```
+
+默认是 CUDA Compose。Ascend 使用独立的完整 Compose 文件：
+
+```bash
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
+```
+
+本地没有 Docker、目标驱动、模型缓存或 GPU/NPU 时，不要尝试运行上述命令；可先运行离线
+Python 测试和脚本语法检查，之后再在目标服务器完成 Compose 和真实解析烟测。
 
 ## 使用
 
@@ -59,7 +95,7 @@ uv run pdf-parser parse input.pdf -o output\result.json
 uv run pdf-parser parse input.pdf --concurrency 2
 ```
 
-也支持 `.env` 文件或环境变量。可以先复制模板，再按实际远端
+独立运行时也支持 `.env` 文件或环境变量。可以先复制模板，再按实际远端
 PaddleOCR-VL / PaddleX 服务地址修改 `PDF_PARSER_ENDPOINT`：
 
 ```powershell
