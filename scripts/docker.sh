@@ -9,15 +9,27 @@ readonly CONTRACTLENS_PLATFORM="${CONTRACTLENS_PLATFORM:-cuda}"
 case "${CONTRACTLENS_PLATFORM}" in
     cuda)
         readonly COMPOSE_FILE="${PROJECT_ROOT}/compose.yaml"
+        readonly DEFAULT_ENV_FILE="${PROJECT_ROOT}/.env"
         ;;
     ascend)
         readonly COMPOSE_FILE="${PROJECT_ROOT}/compose.ascend.yaml"
+        readonly DEFAULT_ENV_FILE="${PROJECT_ROOT}/.env.ascend"
         ;;
     *)
         echo "CONTRACTLENS_PLATFORM must be cuda or ascend; received: ${CONTRACTLENS_PLATFORM}" >&2
         exit 2
         ;;
 esac
+
+readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
+COMPOSE_ENV_ARGS=()
+if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
+    COMPOSE_ENV_ARGS=(--env-file "${CONTRACTLENS_ENV_FILE}")
+fi
+
+compose() {
+    docker compose "${COMPOSE_ENV_ARGS[@]}" -f "${COMPOSE_FILE}" "$@"
+}
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "Docker CLI was not found." >&2
@@ -33,25 +45,25 @@ cd "${PROJECT_ROOT}"
 
 case "${ACTION}" in
     config)
-        docker compose -f "${COMPOSE_FILE}" config --quiet
+        compose config --quiet
         ;;
     build)
-        docker compose -f "${COMPOSE_FILE}" build --pull
+        compose build --pull
         ;;
     up)
-        docker compose -f "${COMPOSE_FILE}" up --detach --remove-orphans
+        compose up --detach --remove-orphans
         ;;
     down)
-        docker compose -f "${COMPOSE_FILE}" down
+        compose down
         ;;
     restart)
-        docker compose -f "${COMPOSE_FILE}" restart
+        compose restart
         ;;
     logs)
-        docker compose -f "${COMPOSE_FILE}" logs --follow --tail 200
+        compose logs --follow --tail 200
         ;;
     ps)
-        docker compose -f "${COMPOSE_FILE}" ps
+        compose ps
         ;;
     *)
         echo "Usage: CONTRACTLENS_PLATFORM={cuda|ascend} $0 {config|build|up|down|restart|logs|ps}" >&2

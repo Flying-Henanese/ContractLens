@@ -54,11 +54,11 @@ services:
     init: true
     privileged: true
     environment:
-      ASCEND_RT_VISIBLE_DEVICES: ${VLM_NPU_IDS:-1,2}
+      ASCEND_RT_VISIBLE_DEVICES: ${VLM_NPU_IDS:-4,5,6}
       VLM_MODEL: ${VLM_MODEL:-PaddleOCR-VL-1.6-0.9B}
-      VLM_DATA_PARALLEL_SIZE: ${VLM_DATA_PARALLEL_SIZE:-2}
+      VLM_DATA_PARALLEL_SIZE: ${VLM_DATA_PARALLEL_SIZE:-3}
       VLM_DATA_PARALLEL_BACKEND: ${VLM_DATA_PARALLEL_BACKEND:-mp}
-      VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.8}
+      VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.3}
       VLM_MAX_NUM_SEQS: ${VLM_MAX_NUM_SEQS:-16}
       VLM_MAX_NUM_BATCHED_TOKENS: ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
     command:
@@ -89,7 +89,7 @@ services:
       paddleocr-vlm-server:
         condition: service_healthy
     environment:
-      ASCEND_RT_VISIBLE_DEVICES: ${PIPELINE_NPU_ID:-0}
+      ASCEND_RT_VISIBLE_DEVICES: ${PIPELINE_NPU_ID:-7}
     command:
       - paddlex
       - --serve

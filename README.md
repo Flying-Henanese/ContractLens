@@ -52,6 +52,7 @@ bash scripts/docker.sh ps
 默认是 CUDA Compose。Ascend 使用独立的完整 Compose 文件：
 
 ```bash
+cp .env.ascend.template .env.ascend
 CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
 CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
 ```

@@ -61,6 +61,19 @@ def test_unified_ascend_compose_keeps_gateway_and_inference_in_one_lifecycle():
     assert "http://paddleocr-vl-api:8080" in compose
     assert "ASCEND_RT_VISIBLE_DEVICES" in compose
     assert "./paddleocr-server/docker/vlm-entrypoint-ascend.sh" in compose
+    assert "${VLM_NPU_IDS:-4,5,6}" in compose
+    assert "${VLM_DATA_PARALLEL_SIZE:-3}" in compose
+    assert "${VLM_GPU_MEMORY_UTILIZATION:-0.3}" in compose
+    assert "${PIPELINE_NPU_ID:-7}" in compose
+
+
+def test_ascend_environment_template_preserves_inference_defaults():
+    env_template = (ROOT / ".env.ascend.template").read_text(encoding="utf-8")
+
+    assert "PIPELINE_NPU_ID=7" in env_template
+    assert "VLM_NPU_IDS=4,5,6" in env_template
+    assert "VLM_DATA_PARALLEL_SIZE=3" in env_template
+    assert "VLM_GPU_MEMORY_UTILIZATION=0.3" in env_template
 
 
 def test_docker_build_context_excludes_user_data_and_local_environment():
@@ -82,5 +95,6 @@ def test_linux_docker_helper_wraps_expected_compose_actions():
         assert f"    {action})" in helper
     assert "docker compose" in helper
     assert "CONTRACTLENS_PLATFORM" in helper
+    assert "CONTRACTLENS_ENV_FILE" in helper
     assert "compose.ascend.yaml" in helper
     assert not (ROOT / "scripts" / "docker.ps1").exists()

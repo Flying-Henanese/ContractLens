@@ -13,6 +13,7 @@ wheels/
 .env
 .env.*
 !.env.template
+!.env.ascend.template
 .python-version
 
 resources/

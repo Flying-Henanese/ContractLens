@@ -5,6 +5,7 @@
 .env
 .env.*
 !.env.template
+!.env.ascend.template
 .pytest_cache
 .pytest-tmp*
 .ruff_cache

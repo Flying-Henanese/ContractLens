@@ -106,7 +106,7 @@ bash scripts/docker.sh
 bash scripts/docker.sh config
 ```
 
-Build and start the gateway, PaddleX, and vLLM together:
+Build the gateway, then start the gateway, PaddleX, and vLLM together:
 
 ```bash
 bash scripts/docker.sh build
@@ -122,6 +122,7 @@ is available at `http://<host>:${PDF_PARSER_PORT}`.
 For Ascend, prefix the same command with `CONTRACTLENS_PLATFORM=ascend`:
 
 ```bash
+cp .env.ascend.template .env.ascend
 CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
 CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
 ```

@@ -20,7 +20,6 @@ services:
       NCCL_P2P_DISABLE: "1"
       NCCL_IB_DISABLE: "1"
 
-      
     command:
       - /bin/bash
       - /opt/paddleocr-server/vlm-entrypoint.sh
@@ -85,4 +84,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 120s
-
