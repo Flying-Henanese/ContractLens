@@ -2,6 +2,7 @@
 
 | 计划 | 目标 | 状态 | 最后更新 |
 | --- | --- | --- | --- |
+| [`2026-09-07-unified-inference-stack.md`](2026-09-07-unified-inference-stack.md) | 合并业务网关与推理平台为统一文档处理栈 | active | 2026-09-07 |
 | [`2026-07-30-element-image-resources.md`](2026-07-30-element-image-resources.md) | 为视觉元素设计可检索的图像资源 | active | 2026-07-30 |
 | [`2026-07-28-whole-document-submission.md`](2026-07-28-whole-document-submission.md) | 将远端提交由逐页改为整份 PDF（尚未实施） | active | 2026-08-12 |
 
