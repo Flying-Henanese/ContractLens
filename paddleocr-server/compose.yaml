@@ -1,0 +1,88 @@
+services:
+  paddleocr-vlm-server:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:${VLM_IMAGE_TAG:-latest-nvidia-gpu}
+    container_name: paddleocr-vlm-server
+    # 与 PaddleOCR 官方 Compose 保持一致，避免模型缓存和设备权限问题。
+    user: root
+    init: true
+    ports:
+      - "8118:8118"
+    environment:
+      CUDA_VISIBLE_DEVICES: ${VLM_GPU_IDS:-5,6}
+      VLM_MODEL: ${VLM_MODEL:-PaddleOCR-VL-1.6-0.9B}
+      VLM_DATA_PARALLEL_SIZE: ${VLM_DATA_PARALLEL_SIZE:-2}
+      VLM_DATA_PARALLEL_BACKEND: ${VLM_DATA_PARALLEL_BACKEND:-mp}
+      VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.8}
+      VLM_MAX_NUM_SEQS: ${VLM_MAX_NUM_SEQS:-16}
+      VLM_MAX_NUM_BATCHED_TOKENS: ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
+      # NCCL 配置，避免在多 GPU 时出现问题
+      NCCL_DEBUG: INFO
+      NCCL_P2P_DISABLE: "1"
+      NCCL_IB_DISABLE: "1"
+
+      
+    command:
+      - /bin/bash
+      - /opt/paddleocr-server/vlm-entrypoint.sh
+    volumes:
+      - ./vllm_config.yaml:/opt/paddleocr-server/vllm_config.yaml:ro
+      - ./docker/vlm-entrypoint.sh:/opt/paddleocr-server/vlm-entrypoint.sh:ro
+      - /home/mineru_dev/.paddlex:/home/paddleocr/.paddlex
+    shm_size: 64gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8118/v1/models >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: ${STARTUP_TIMEOUT:-900}s
+
+  paddleocr-vl-api:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-vl:${API_IMAGE_TAG:-latest-nvidia-gpu}
+    container_name: paddleocr-vl-api
+    user: root
+    init: true
+    depends_on:
+      paddleocr-vlm-server:
+        condition: service_healthy
+    environment:
+      CUDA_VISIBLE_DEVICES: ${PIPELINE_GPU_ID:-4}
+    command:
+      - paddlex
+      - --serve
+      - --pipeline
+      - /opt/paddleocr-server/PaddleOCR-VL-1.6.yaml
+      - --device
+      - gpu:0
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    ports:
+      - "${API_PORT:-8880}:8080"
+    volumes:
+      - ./PaddleOCR-VL-1.6.yaml:/opt/paddleocr-server/PaddleOCR-VL-1.6.yaml:ro
+      - /home/mineru_dev/.paddlex:/home/paddleocr/.paddlex
+    shm_size: 64gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+

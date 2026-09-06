@@ -1,0 +1,143 @@
+
+pipeline_name: PaddleOCR-VL-1.6
+
+# Pipeline 顶层批处理上限；实际吞吐还受各子模块和队列并发限制。
+batch_size: 64
+
+# 启用输入、CV 和 VLM 阶段之间的队列流水线，使各阶段可重叠执行。
+use_queues: True
+
+# 版面块裁剪、合并和 VLM 请求准备使用的 CPU 工作线程数。
+layout_prep_cpu_workers: 16
+
+# 启用方向分类、文档展平等前处理。
+use_doc_preprocessor: True
+# 启用 PP-DocLayoutV3 版面检测；关闭后不会按版面框拆分页面。
+use_layout_detection: True
+# 对检测到的图表区域执行图表识别。
+use_chart_recognition: True
+# 对检测到的印章区域执行印章识别。
+use_seal_recognition: True
+# 将各版面块内容整理为适合输出的格式。
+format_block_content: True
+# 合并属于同一逻辑区域的相邻版面块。
+merge_layout_blocks: True
+
+# 生成 Markdown 时忽略页码、页眉页脚、脚注和旁注等非正文标签。
+markdown_ignore_labels:
+  - number
+  - footnote
+  - header
+  - header_image
+  - footer
+  - footer_image
+  - aside_text
+
+SubModules:
+  LayoutDetection:
+    module_name: layout_detection
+    # 前道版面检测模型，负责输出各页面的版面类别和边界框。
+    model_name: PP-DocLayoutV3
+    model_dir: null
+    # 单轮版面检测批量；过大可能增加 Pipeline GPU/NPU 显存占用。
+    batch_size: 8
+    # 各版面类别的置信度阈值；索引 20 为 seal，使用更高阈值过滤模糊印章。
+    threshold:
+      0: 0.3
+      1: 0.3
+      2: 0.3
+      3: 0.3
+      4: 0.3
+      5: 0.3
+      6: 0.3
+      7: 0.3
+      8: 0.3
+      9: 0.3
+      10: 0.3
+      11: 0.3
+      12: 0.3
+      13: 0.3
+      14: 0.3
+      15: 0.3
+      16: 0.3
+      17: 0.3
+      18: 0.3
+      19: 0.3
+      20: 0.9  # seal
+      21: 0.3
+      22: 0.3
+      23: 0.3
+      24: 0.3
+    # 对重叠版面框执行 NMS，减少重复区域。
+    layout_nms: True
+    # 保持检测框原始宽高比例，不额外向外扩张。
+    layout_unclip_ratio: [1.0, 1.0]
+    # 按类别决定重叠框取大框还是求并集，避免公式、图表等区域被错误切碎。
+    layout_merge_bboxes_mode:
+      0: "union" # abstract
+      1: "union" # algorithm
+      2: "union" # aside_text
+      3: "large" # chart
+      4: "union" # content
+      5: "large" # display_formula
+      6: "large" # doc_title
+      7: "union" # figure_title
+      8: "union" # footer
+      9: "union" # footer
+      10: "union" # footnote
+      11: "union" # formula_number
+      12: "union" # header
+      13: "union" # header
+      14: "union" # image
+      15: "large" # inline_formula
+      16: "union" # number
+      17: "large" # paragraph_title
+      18: "union" # reference
+      19: "union" # reference_content
+      20: "union" # seal
+      21: "union" # table
+      22: "union" # text
+      23: "union" # text
+      24: "union" # vision_footnote
+  VLRecognition:
+    module_name: vl_recognition
+    model_name: PaddleOCR-VL-1.6-0.9B
+    model_dir: null
+    # VLM 模块的内部批处理上限，不代表同时发出 4096 个 HTTP 请求。
+    batch_size: 4096
+    genai_config:
+      # 使用独立的 OpenAI-compatible vLLM 服务执行版面块识别。
+      backend: vllm-server
+      # Docker Compose 使用服务名；start_vl.sh 会生成指向 127.0.0.1 的本地配置。
+      server_url: http://paddleocr-vlm-server:8118/v1
+      # Pipeline 同时提交给 vLLM 的版面块请求上限。
+      max_concurrency: 16
+
+SubPipelines:
+  DocPreprocessor:
+    pipeline_name: doc_preprocessor
+    # 文档预处理的单轮批量。
+    batch_size: 8
+    # 检测并纠正文档的整体旋转方向。
+    use_doc_orientation_classify: True
+    # 对弯曲、透视或拍摄形变的文档进行展平校正。
+    use_doc_unwarping: True
+    SubModules:
+      DocOrientationClassify:
+        module_name: doc_text_orientation
+        # 文档级方向分类模型。
+        model_name: PP-LCNet_x1_0_doc_ori
+        model_dir: null
+        batch_size: 8
+      DocUnwarping:
+        module_name: image_unwarping
+        # 文档展平与畸变校正模型。
+        model_name: UVDoc
+        model_dir: null
+
+Serving:
+  # 禁用可视化和中间图 Base64 编码，减少非推理开销。
+  visualize: false
+  extra:
+    # 不在配置层限制输入图片数量；实际容量仍受内存和超时限制。
+    max_num_input_imgs: null
