@@ -2,6 +2,8 @@
 
 修改代码、脚本、配置或文档前执行：
 
+以下相对路径假定当前目录为 `paddleocr-server/`。
+
 - 阅读根目录 `AGENTS.md`。
 - 检查 `git status --short`，保留用户已有的无关改动。
 - 确认任务属于 CUDA、昇腾、两者共用部分，还是旧 PP-StructureV3 入口。

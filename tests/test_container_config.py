@@ -126,5 +126,7 @@ def test_imported_inference_module_defers_production_lifecycle_to_root():
         in agent_instructions
     )
     assert "尚未在昇腾主机验证" in ascend_guide
+    assert "设备编号 `4,5,6,7` 可用" in ascend_guide
+    assert "`pyproject.toml`、`uv.lock`、Dockerfile" in ascend_guide
     assert "ContractLens production must use the root" in cuda_reference
     assert "ContractLens production must use the root" in ascend_reference

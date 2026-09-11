@@ -23,11 +23,12 @@ ContractLens 网关，并可能与根 Compose 的服务名或端口冲突。
 - 宿主机可执行 `npu-smi info`，并提供 `/usr/local/Ascend/driver`、
   `/usr/local/bin/npu-smi` 与 `/usr/local/dcmi`。
 - 已确认网关、PaddleX 与 vLLM 镜像可用，以及 `PADDLEX_CACHE_DIR` 存在且不得清理。
-- 至少四张可用 NPU：根默认将 Pipeline 分配给 NPU `7`，将三个 VLM 数据并行副本分配给
-  NPU `4,5,6`。可按目标机器调整，但 Pipeline 设备不得和 VLM 设备重叠，且 VLM 设备数必须
-  等于 `VLM_DATA_PARALLEL_SIZE`。
+- 根默认需要设备编号 `4,5,6,7` 可用：Pipeline 使用 NPU `7`，三个 VLM 数据并行副本使用
+  NPU `4,5,6`。设备编号不同的主机必须先调整环境文件；Pipeline 设备不得和 VLM 设备重叠，
+  且 VLM 设备数必须等于 `VLM_DATA_PARALLEL_SIZE`。
 
-推理镜像已经包含适配昇腾的 PaddlePaddle、NPU 插件与 vLLM 运行环境；不要替换为 NVIDIA 镜像。
+所选昇腾推理镜像预期提供适配的 PaddlePaddle、NPU 插件与 vLLM 运行环境；不要替换为
+NVIDIA 镜像，并在目标主机上验证该预期。
 
 ## 根目录生产启动
 
@@ -38,7 +39,7 @@ cp .env.ascend.template .env.ascend
 CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
 ```
 
-首次启动或网关 Dockerfile、锁定依赖、镜像构建参数变化时才构建网关镜像：
+首次启动或网关 `pyproject.toml`、`uv.lock`、Dockerfile、镜像构建参数变化时才构建网关镜像：
 
 ```bash
 CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh build
@@ -52,8 +53,10 @@ CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh ps
 ```
 
 确认网关 `http://127.0.0.1:8888/openapi.json`、PaddleX
-`http://127.0.0.1:8880/health`、vLLM `/v1/models` 与 `npu-smi info`；随后使用一个
-获准的真实输入执行解析烟测。异常时读取对应服务的有限日志，不循环重启。
+`http://127.0.0.1:8880/health`、三个容器的 healthy 状态与 `npu-smi info`；vLLM 的
+healthcheck 本身请求容器内 `/v1/models`。根 Ascend Compose 不发布 `8118`，需要诊断该端点时，
+通过对应 vLLM 容器内的请求检查。随后使用一个获准的真实输入执行解析烟测。异常时读取对应服务的
+有限日志，不循环重启。
 
 ## 推理配置说明
 

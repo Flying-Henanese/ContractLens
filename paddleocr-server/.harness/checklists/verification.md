@@ -21,6 +21,8 @@ git diff --check
 
 ## Compose 检查
 
+以下命令假定当前目录为 `paddleocr-server/`：
+
 ```bash
 cd ..
 bash scripts/docker.sh config
