@@ -47,6 +47,8 @@ def test_unified_cuda_compose_starts_gateway_and_inference_stack_together():
     assert "paddleocr-vlm-server:" in compose
     assert "paddleocr-vl-api:" in compose
     assert "http://paddleocr-vl-api:8080" in compose
+    assert "PDF_PARSER_ENDPOINT: http://paddleocr-vl-api:8080" in compose
+    assert "PDF_PARSER_DOCKER_ENDPOINT" not in compose
     assert "paddleocr-vl-api:" in compose.split("depends_on:", maxsplit=1)[1]
     assert "./paddleocr-server:/opt/paddleocr-server:ro" in compose
     assert compose.count("./paddleocr-server:/opt/paddleocr-server:ro") == 2
@@ -59,6 +61,8 @@ def test_unified_ascend_compose_keeps_gateway_and_inference_in_one_lifecycle():
     assert "paddleocr-vlm-server:" in compose
     assert "paddleocr-vl-api:" in compose
     assert "http://paddleocr-vl-api:8080" in compose
+    assert "PDF_PARSER_ENDPOINT: http://paddleocr-vl-api:8080" in compose
+    assert "PDF_PARSER_DOCKER_ENDPOINT" not in compose
     assert "ASCEND_RT_VISIBLE_DEVICES" in compose
     assert "./paddleocr-server:/opt/paddleocr-server:ro" in compose
     assert compose.count("./paddleocr-server:/opt/paddleocr-server:ro") == 2

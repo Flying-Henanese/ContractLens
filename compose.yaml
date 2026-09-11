@@ -30,7 +30,7 @@ services:
       PYTHONPATH: /app/src
       # 在统一 Compose 中通过服务 DNS 调用同一项目内的 PaddleX Pipeline。
       # 本地 CLI/开发可继续使用 PDF_PARSER_ENDPOINT 配置独立远端地址。
-      PDF_PARSER_ENDPOINT: ${PDF_PARSER_DOCKER_ENDPOINT:-http://paddleocr-vl-api:8080}
+      PDF_PARSER_ENDPOINT: http://paddleocr-vl-api:8080
       PDF_PARSER_TIMEOUT_SECONDS: ${PDF_PARSER_TIMEOUT_SECONDS:-120}
       PDF_PARSER_RETRIES: ${PDF_PARSER_RETRIES:-2}
       PDF_PARSER_CONCURRENCY: ${PDF_PARSER_CONCURRENCY:-1}

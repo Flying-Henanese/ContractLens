@@ -41,9 +41,9 @@ and write temporary uploaded PDFs under the `/tmp` tmpfs.
 ## Compose configuration
 
 Compose reads `.env`. Start from `.env.template` and review the gateway, inference
-device, image, and model-cache settings. The gateway's Compose-only endpoint is
-`PDF_PARSER_DOCKER_ENDPOINT=http://paddleocr-vl-api:8080`; it intentionally differs
-from `PDF_PARSER_ENDPOINT`, which remains for standalone CLI/FastAPI use.
+device, image, and model-cache settings. Inside the unified Compose network the gateway
+always uses `http://paddleocr-vl-api:8080`; `PDF_PARSER_ENDPOINT` remains for standalone
+CLI/FastAPI use and cannot override the internal service address.
 
 The default CUDA selection is:
 
