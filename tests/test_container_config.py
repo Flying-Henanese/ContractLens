@@ -48,8 +48,8 @@ def test_unified_cuda_compose_starts_gateway_and_inference_stack_together():
     assert "paddleocr-vl-api:" in compose
     assert "http://paddleocr-vl-api:8080" in compose
     assert "paddleocr-vl-api:" in compose.split("depends_on:", maxsplit=1)[1]
-    assert "./paddleocr-server/PaddleOCR-VL-1.6.yaml" in compose
-    assert "./paddleocr-server/vllm_config.yaml" in compose
+    assert "./paddleocr-server:/opt/paddleocr-server:ro" in compose
+    assert compose.count("./paddleocr-server:/opt/paddleocr-server:ro") == 2
 
 
 def test_unified_ascend_compose_keeps_gateway_and_inference_in_one_lifecycle():
@@ -60,7 +60,8 @@ def test_unified_ascend_compose_keeps_gateway_and_inference_in_one_lifecycle():
     assert "paddleocr-vl-api:" in compose
     assert "http://paddleocr-vl-api:8080" in compose
     assert "ASCEND_RT_VISIBLE_DEVICES" in compose
-    assert "./paddleocr-server/docker/vlm-entrypoint-ascend.sh" in compose
+    assert "./paddleocr-server:/opt/paddleocr-server:ro" in compose
+    assert compose.count("./paddleocr-server:/opt/paddleocr-server:ro") == 2
     assert "${VLM_NPU_IDS:-4,5,6}" in compose
     assert "${VLM_DATA_PARALLEL_SIZE:-3}" in compose
     assert "${VLM_GPU_MEMORY_UTILIZATION:-0.3}" in compose

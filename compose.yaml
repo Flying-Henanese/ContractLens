@@ -74,8 +74,7 @@ services:
       - /bin/bash
       - /opt/paddleocr-server/vlm-entrypoint.sh
     volumes:
-      - ./paddleocr-server/vllm_config.yaml:/opt/paddleocr-server/vllm_config.yaml:ro
-      - ./paddleocr-server/docker/vlm-entrypoint.sh:/opt/paddleocr-server/vllm-entrypoint.sh:ro
+      - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
     shm_size: 64gb
     deploy:
@@ -116,7 +115,7 @@ services:
     ports:
       - "${API_PORT:-8880}:8080"
     volumes:
-      - ./paddleocr-server/PaddleOCR-VL-1.6.yaml:/opt/paddleocr-server/PaddleOCR-VL-1.6.yaml:ro
+      - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
     shm_size: 64gb
     deploy:

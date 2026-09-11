@@ -65,8 +65,7 @@ services:
       - /bin/bash
       - /opt/paddleocr-server/vlm-entrypoint-ascend.sh
     volumes:
-      - ./paddleocr-server/vllm_config.yaml:/opt/paddleocr-server/vllm_config.yaml:ro
-      - ./paddleocr-server/docker/vlm-entrypoint-ascend.sh:/opt/paddleocr-server/vllm-entrypoint-ascend.sh:ro
+      - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver
       - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
@@ -104,7 +103,7 @@ services:
     ports:
       - "${API_PORT:-8880}:8080"
     volumes:
-      - ./paddleocr-server/PaddleOCR-VL-1.6.yaml:/opt/paddleocr-server/PaddleOCR-VL-1.6.yaml:ro
+      - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver
       - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
