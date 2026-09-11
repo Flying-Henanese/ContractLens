@@ -2,6 +2,19 @@
 
 本文件只记录跨模块、必须长期保持的行为。具体请求粒度等正在迁移的行为，以当前实现、测试和 active plan 共同判断，不在此重复固化。
 
+## 仓库与部署边界
+
+1. `src/pdf_parser/` 与 `paddleocr-server/` 是同一仓库中的两个逻辑模块，不再作为两个独立项目
+   分别部署；它们仍保留各自的运行时依赖、模型/硬件配置和职责边界。
+2. 根目录 `compose.yaml` 或 `compose.ascend.yaml` 必须将 `api`、`paddleocr-vl-api` 和
+   `paddleocr-vlm-server` 作为一套生命周期管理；`scripts/docker.sh` 是该整套服务唯一受支持的
+   生命周期入口。
+3. 统一 Compose 中，网关只能通过 `http://paddleocr-vl-api:8080` 调用 PaddleX Pipeline，不得
+   直接调用 vLLM、宿主机端口或历史远端 IP。独立运行网关时才通过 `PDF_PARSER_ENDPOINT` 明确指定
+   可访问的 PaddleX 地址。
+4. 推理入口脚本、Pipeline 配置、模型参数和 CUDA/Ascend 设备拓扑保留在
+   `paddleocr-server/`；推理服务以只读目录挂载读取它们，网关模块不得复制或改变这些配置。
+
 ## 输入、编排与失败
 
 1. PDF 输入必须在本地校验；加密、空或损坏 PDF 抛出 `InvalidPdfError`。当前

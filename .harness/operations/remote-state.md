@@ -4,7 +4,31 @@
 
 ## 最近观测
 
-观测日期：2026-07-29
+观测日期：2026-09-11（只读复核）
+
+远端工作区位于 `codex/unify-inference-stack`，提交为 `5dfebe4`，工作区干净。执行
+`bash scripts/docker.sh ps` 未列出任何容器；对 `127.0.0.1:8888/openapi.json` 和
+`127.0.0.1:8880/health` 的本机请求均被拒绝连接。该记录只说明复核时统一栈没有运行，未对
+其执行启动、重建、清理或修复操作。
+
+部署或真实烟测前必须按远端工作流重新检查可用 GPU、端口和容器状态；不得把下述历史成功验证
+当作当前在线状态。
+
+## 历史观测（2026-09-11，统一 Compose CUDA 验证）
+
+在同一分支和提交 `5dfebe4` 上，预检确认目标端口 `8888`、`8880`、`8118` 可用，且网关、PaddleX
+与 vLLM 所需镜像已存在。未重建镜像：Dockerfile、锁定依赖和镜像参数没有变化，使用现有镜像由
+`bash scripts/docker.sh up` 创建统一栈。
+
+`bash scripts/docker.sh config`、`up` 和 `ps` 均成功。`api`、`paddleocr-vl-api`、
+`paddleocr-vlm-server` 三个容器均达到 healthy；网关的 `/openapi.json` 和 PaddleX 的 `/health`
+均返回成功。使用临时的一页含文本 PDF 通过 PaddleX 端点执行 `pdf-parser parse`，生成的结果经
+`validate_result.py` 契约校验通过。临时输入未保存到仓库，烟测结果仅写入 `output/smoke/`。
+
+该次运行结束时，Pipeline 使用 GPU 4，vLLM 使用 GPU 5、6；其余 T4 GPU 空闲。这是一次启动、
+连通性和最小真实解析验证，不代表性能基线、模型质量比较或 Ascend 验证已经完成。
+
+## 历史观测（2026-07-29，合并前部署）
 
 部署状态：用户确认 T4 已切换到 Docker Compose，FastAPI 镜像已成功构建且容器正在运行。
 该确认只覆盖部署方式和一次成功启动，不替代每次发布前的 `docker compose ps`、容器健康

@@ -2,7 +2,7 @@
 status: active
 owner: Codex
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-11
 scope:
   - repository-layout
   - gateway-module
@@ -41,8 +41,8 @@ implementation to change without spreading its details into business callers.
 - The current `ContractLens` package is a gateway/adapter.  It validates input,
   currently splits PDFs into pages, calls `POST /layout-parsing`, and normalizes
   PaddleX output into the public `ParseResponse` contract.
-- The current `paddleocr-server` repository owns the inference topology.  Its
-  PaddleX process listens on container port `8080` and is published on host
+- The imported `paddleocr-server/` inference module owns the inference topology.
+  Its PaddleX process listens on container port `8080` and is published on host
   port `8880`; it calls its vLLM process over port `8118`.
 - The gateway's currently configured default, `http://192.168.0.194:8080`, is
   a historical remote endpoint.  The current T4 deployment record identifies
@@ -68,9 +68,10 @@ implementation to change without spreading its details into business callers.
 
 ## Current implementation scope
 
-The user requested an initial glue-only delivery because Docker, model, and
-target hardware validation are unavailable in the current environment. This
-delivery intentionally implements only the following reversible subset:
+The initial delivery intentionally implemented only the following reversible
+subset. It has since passed a CUDA T4 startup, endpoint, and real-parse smoke
+validation; the remaining target architecture work is still deliberately
+deferred:
 
 1. preserve the `paddleocr-server` Git history under the literal
    `paddleocr-server/` directory in this repository;
@@ -429,19 +430,32 @@ part of rollback. There is no persistent application data migration to reverse.
   and Ascend Compose topologies. The gateway depends on the PaddleX healthcheck
   and receives the internal `http://paddleocr-vl-api:8080` endpoint; PaddleX
   depends on the vLLM healthcheck. `scripts/docker.sh` selects the CUDA or
-  Ascend topology through `CONTRACTLENS_PLATFORM`. This is a glue-only change:
-  Docker, Compose configuration parsing, hardware startup, and real parsing
-  have not been run in the current environment.
+  Ascend topology through `CONTRACTLENS_PLATFORM`.
+- 2026-09-11: Corrected the inference services to read their entrypoint and
+  Pipeline configuration from a read-only `./paddleocr-server` directory mount.
+  On T4 CUDA, `bash scripts/docker.sh config`, `up`, and `ps` succeeded; the
+  gateway, PaddleX, and vLLM containers all became healthy. Gateway OpenAPI and
+  PaddleX health checks succeeded, and a temporary text-bearing one-page PDF
+  completed an end-to-end PaddleX parse whose result passed `validate_result.py`.
+  The existing gateway and inference images were reused because no image input
+  changed. GPU 4 served PaddleX and GPUs 5–6 served vLLM. This verifies the
+  glue-only scope on CUDA, not Ascend, performance, or the later contract and
+  port-isolation stages.
 
 ## Unexpected findings
 
 - The gateway's default endpoint is historical and differs from the recorded
-  current inference deployment. The host/container port distinction must be
-  resolved before a unified deployment can be considered correct.
+  current inference deployment. Unified Compose now resolves the host/container
+  distinction through service DNS; standalone gateway use must still provide an
+  explicitly reachable PaddleX endpoint.
 - The gateway currently splits PDFs despite an active, evidence-backed plan to
   use a single whole-document provider request. The merge should complete that
   plan at the provider seam rather than preserve it indefinitely.
 
 ## Result summary
 
-Pending implementation and target-hardware verification.
+The glue-only monorepo and unified Compose implementation is complete and has
+passed one CUDA T4 startup and real-parse smoke validation. The target
+architecture remains active: provider-contract extraction, internal-only raw
+ports, liveness/readiness separation, document-level PDF submission, Ascend
+verification, and release/rollback work are not complete.

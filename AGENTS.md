@@ -68,12 +68,12 @@ PaddleOCR-VL 推理配置模块。根目录 Compose 会一起编排网关、Padd
 
 ## 6. 远端开发环境
 
-- T4 服务器通过本机 SSH 配置中的 `contractlens-t4` 别名访问，仓库不保存私钥或私钥路径。
+- T4 服务器通过本机 SSH 配置中的 `t4` 别名访问，仓库不保存私钥或私钥路径。
 - 远端项目目录固定为 `/home/mineru_dev/projects/ContractLens`。
 - 影响 FastAPI、PaddleX 请求、归一化或输出契约的改动，在本地门槛通过后按远端部署工作流验证。
 - 部署前必须检查远端分支和工作区；存在未提交改动时停止，不得强制覆盖、清理或重置。
 - T4 上的网关、PaddleX 和 vLLM 使用根目录 Docker Compose 作为同一生命周期管理。部署时先
-  在项目目录执行 `git pull --ff-only`，再依次验证 Compose 配置、构建镜像并更新整套容器；
-  宿主机不运行 `uv sync`。
+  在项目目录执行 `git pull --ff-only`，再验证 Compose 配置并更新整套容器；仅在首次启动、
+  Dockerfile、依赖锁定文件或镜像构建参数变化时构建镜像。宿主机不运行 `uv sync`。
 - 使用仓库的 `scripts/docker.sh` 管理整套容器，不得用 `pkill`、递归删除或临时后台进程
   冒充可靠重启。

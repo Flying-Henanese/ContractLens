@@ -2,10 +2,26 @@
 
 ## 系统边界与当前数据流
 
+当前仓库是一个单仓库、单次 Compose 发布的文档解析产品，而不是 `main` 分支时两个独立部署的
+服务：根目录 `src/pdf_parser/` 是业务网关，`paddleocr-server/` 是随仓库交付但保持独立职责的
+推理配置模块。它们不共享 Python 环境、模型实现或硬件配置，却由根目录 Compose 作为同一套运行时
+进程启动和停止。
+
 网关代码不承载模型推理：文档 API 当前接受 PDF 或受支持图像；CLI 仍只接受 PDF。根目录
-Compose 现在同时启动网关、`paddleocr-server/` 中的 PaddleX Pipeline 和其 vLLM 进程，网关通过
+Compose 同时启动网关、`paddleocr-server/` 中的 PaddleX Pipeline 和其 vLLM 进程，网关通过
 Compose 服务 DNS `http://paddleocr-vl-api:8080` 请求 Pipeline。PDF 仍采用逐页远端请求，整份
 PDF 提交是 active plan 中尚未落地的目标状态。
+
+```text
+外部调用方
+  -> api（根目录网关；业务 API）
+       -> paddleocr-vl-api（PaddleX Pipeline；Compose 内部 DNS）
+            -> paddleocr-vlm-server（PaddleOCR-VL / vLLM）
+```
+
+`API_PORT` 和 CUDA 的 `VLM_PORT` 目前仍保留宿主机诊断映射，但它们不是业务调用契约；网关
+不得直接调用 vLLM。推理容器将整个 `./paddleocr-server` 只读挂载到
+`/opt/paddleocr-server`，因此入口脚本与 Pipeline 配置始终来自导入模块，而不是网关镜像。
 
 ```text
 本地 PDF
@@ -31,7 +47,8 @@ PDF 提交是 active plan 中尚未落地的目标状态。
 
 部署链路为 `api -> paddleocr-vl-api -> paddleocr-vlm-server`：`api` 等待 Pipeline 健康，
 Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `compose.ascend.yaml`（Ascend）
-一起启动、重启和停止。推理配置保持在 `paddleocr-server/`，而不是复制到网关 Python 模块中。
+和 `scripts/docker.sh` 一起启动、重启和停止。推理配置保持在 `paddleocr-server/`，而不是复制到
+网关 Python 模块中。
 
 正文回退、普通元素/印章坐标和印章去重能力等稳定行为只在 [`invariants.md`](invariants.md)
 定义，本页不复制规则细节。

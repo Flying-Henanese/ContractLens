@@ -65,8 +65,8 @@ the Ascend-specific gateway image and inference device values:
 PDF_PARSER_ASCEND_DOCKERFILE=Dockerfile.ascend
 PDF_PARSER_ASCEND_IMAGE=pdf-parser:ascend-ubuntu22.04
 ASCEND_BASE_IMAGE=ubuntu:22.04
-PIPELINE_NPU_ID=0
-VLM_NPU_IDS=1,2
+PIPELINE_NPU_ID=7
+VLM_NPU_IDS=4,5,6
 ```
 
 `compose.yaml` is the CUDA topology. `compose.ascend.yaml` keeps the imported
@@ -86,16 +86,23 @@ For either host, confirm:
 5. an ARM64 Ascend host builds the gateway natively rather than forcing
    `linux/amd64` emulation.
 
-## Active-iteration source mount
+## Active-iteration source and inference mounts
 
 Both Compose files bind-mount `./src` read-only at `/app/src`, set
 `PYTHONPATH=/app/src`, and start Uvicorn with reload restricted to that directory.
 Python source changes are therefore detected without rebuilding the gateway image.
 
-The mount does not replace the image-managed Python interpreter or locked
-dependencies. Changes to `pyproject.toml`, `uv.lock`, either Dockerfile, either
-Compose file, the imported inference configuration, or environment configuration
-require a rebuild or container recreation.
+Both inference services also bind-mount `./paddleocr-server` read-only at
+`/opt/paddleocr-server`. The vLLM entrypoint and PaddleX Pipeline configuration are
+read from that directory, so the imported module remains the owner of inference
+startup and device settings. After changing a mounted inference entrypoint or
+Pipeline configuration, restart or recreate the affected service so it reads the
+new file.
+
+Neither mount replaces the image-managed Python interpreter or locked dependencies.
+Changes to `pyproject.toml`, `uv.lock`, a Dockerfile, or image build arguments require
+a gateway image build. Changes limited to Compose/environment configuration or mounted
+source/configuration require a container update or restart, not an image rebuild.
 
 ## Review and lifecycle commands
 
@@ -106,7 +113,8 @@ bash scripts/docker.sh
 bash scripts/docker.sh config
 ```
 
-Build the gateway, then start the gateway, PaddleX, and vLLM together:
+Build the gateway only when its Dockerfile, locked dependencies, or build arguments
+changed; then start the gateway, PaddleX, and vLLM together:
 
 ```bash
 bash scripts/docker.sh build
@@ -131,7 +139,7 @@ CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
 
 The T4 server uses the CUDA selection unless the deployment owner explicitly selects
 Ascend. Deployment must still follow the repository remote workflow: inspect the
-remote branch and worktree, pull with `--ff-only`, validate Compose, update the
-three-process stack together, inspect all health checks and logs, and run a real
-parse smoke test. Dependency synchronization happens inside the gateway image build;
-do not run `uv sync` on the host.
+remote branch and worktree, pull with `--ff-only`, validate Compose, build only when
+the gateway image inputs changed, update the three-process stack together, inspect all
+health checks and logs, and run a real parse smoke test. Dependency synchronization
+happens inside the gateway image build; do not run `uv sync` on the host.

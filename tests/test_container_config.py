@@ -13,6 +13,8 @@ def test_dockerfile_separates_cuda_build_and_runtime_stages():
     assert "COPY --from=builder" in runtime
     assert "COPY --from=uv" not in runtime
     assert "USER 10001:10001" in runtime
+    assert "HEALTHCHECK" in runtime
+    assert "http://127.0.0.1:8888/openapi.json" in runtime
     assert 'ENTRYPOINT ["pdf-parser-api"]' in runtime
 
 
@@ -27,6 +29,8 @@ def test_ascend_dockerfile_is_multi_arch_and_separates_build_from_runtime():
     assert "COPY --from=builder" in runtime
     assert "COPY --from=uv" not in runtime
     assert "USER 10001:10001" in runtime
+    assert "HEALTHCHECK" in runtime
+    assert "http://127.0.0.1:8888/openapi.json" in runtime
     assert 'ENTRYPOINT ["pdf-parser-api"]' in runtime
 
 
