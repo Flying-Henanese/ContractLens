@@ -72,7 +72,7 @@ services:
       NCCL_IB_DISABLE: "1"
     command:
       - /bin/bash
-      - /opt/paddleocr-server/vlm-entrypoint.sh
+      - /opt/paddleocr-server/docker/vlm-entrypoint.sh
     volumes:
       - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex

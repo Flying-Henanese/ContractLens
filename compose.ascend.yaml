@@ -63,7 +63,7 @@ services:
       VLM_MAX_NUM_BATCHED_TOKENS: ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
     command:
       - /bin/bash
-      - /opt/paddleocr-server/vlm-entrypoint-ascend.sh
+      - /opt/paddleocr-server/docker/vlm-entrypoint-ascend.sh
     volumes:
       - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
