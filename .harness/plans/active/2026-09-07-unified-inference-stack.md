@@ -441,6 +441,12 @@ part of rollback. There is no persistent application data migration to reverse.
   changed. GPU 4 served PaddleX and GPUs 5–6 served vLLM. This verifies the
   glue-only scope on CUDA, not Ascend, performance, or the later contract and
   port-isolation stages.
+- 2026-09-11: Aligned the imported inference module's README, Ascend guide,
+  module-local Harness, and historical Compose references with the monorepo
+  boundary. They now direct ContractLens production operations to root Compose
+  and `scripts/docker.sh`, distinguish historical two-service evidence from the
+  unverified root Ascend topology, and retain the original inference files only
+  as configuration references.
 
 ## Unexpected findings
 

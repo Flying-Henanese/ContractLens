@@ -22,12 +22,9 @@ git diff --check
 ## Compose 检查
 
 ```bash
-docker compose config --quiet
-
-docker compose \
-  --env-file .env.ascend.example \
-  -f compose.ascend.yaml \
-  config --quiet
+cd ..
+bash scripts/docker.sh config
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
 ```
 
 ## 服务检查
@@ -38,12 +35,12 @@ docker compose \
   本身不足以标识已验证运行时。
 
 ```bash
+curl --fail http://127.0.0.1:8888/openapi.json
 curl --fail http://127.0.0.1:8880/health
-curl --fail http://127.0.0.1:8880/openapi.json
 ```
 
 - VLM 的 `/v1/models` 正常。
-- 单个 PaddleOCR API/PP-DocLayout 前道服务正常。
+- ContractLens 网关、单个 PaddleOCR API/PP-DocLayout 前道服务和 VLM 服务均健康。
 - 分配的每张 GPU/NPU 加载了预期模型。
 - 多实例场景下设备均能产生推理负载。
 - `/layout-parsing` 对真实 PDF 或图片返回成功结果。

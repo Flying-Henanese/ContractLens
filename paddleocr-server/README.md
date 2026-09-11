@@ -1,5 +1,17 @@
 # paddleocr-server
 
+## ContractLens production boundary
+
+This directory is an imported inference module, not the production deployment
+entry point. From the ContractLens repository root, use `scripts/docker.sh` with
+the root `compose.yaml` or `compose.ascend.yaml`; it manages the gateway, PaddleX,
+and vLLM as one lifecycle. The local Compose and host-start examples below are
+historical inference-only references. Do not use them to deploy ContractLens: they
+omit the gateway and can conflict with the root services and ports.
+
+For the current Ascend production workflow and verification status, see
+[`ASCEND.md`](ASCEND.md) and [`../docs/container-deployment.md`](../docs/container-deployment.md).
+
 一个 PaddleOCR-VL-1.6 服务化部署示例：使用单个 PP-DocLayoutV3 Pipeline 完成版面分析，再将裁剪后的版面子图并发发送给多个 vLLM 数据并行副本。
 
 ## 架构
@@ -38,55 +50,14 @@ data-parallel-backend: mp
 
 `PaddleOCR-VL-1.6.yaml` 中的 `VLRecognition.genai_config.max_concurrency` 控制 Pipeline 同时提交多少个版面子图。它和 vLLM 的 `max-num-seqs`、副本数需要一起压测。
 
-## Docker Compose 部署
+## 历史推理模块 Compose 参考（非 ContractLens 部署入口）
 
-要求：Linux、Docker Compose、NVIDIA Container Toolkit，以及至少 3 张可用 GPU（默认 1 张用于 Pipeline，2 张用于 VLM）。
+本目录保留的两个 Compose 文件反映导入前的 Pipeline/VLM 配置关系，但其旧环境模板
+并未作为 ContractLens 文件提供，也不启动网关。不要执行这些旧命令；生产环境中的设备、
+缓存和镜像参数应从根 `.env.template` 或 `.env.ascend.template` 设置，并由根 Compose
+统一编排。
 
-```bash
-cp .env.example .env
-```
-
-编辑 `.env`：
-
-```dotenv
-PIPELINE_GPU_ID=4
-VLM_GPU_IDS=5,6
-VLM_DATA_PARALLEL_SIZE=2
-VLM_DATA_PARALLEL_BACKEND=mp
-```
-
-`VLM_GPU_IDS` 中的 GPU 数量必须等于 `VLM_DATA_PARALLEL_SIZE`。Pipeline GPU 不应与 VLM GPU 重叠。
-
-启动：
-
-```bash
-docker compose up -d
-docker compose logs -f paddleocr-vlm-server
-docker compose logs -f paddleocr-vl-api
-```
-
-检查服务：
-
-```bash
-curl http://127.0.0.1:8880/health
-curl http://127.0.0.1:8880/docs
-```
-
-解析接口：
-
-```text
-POST http://127.0.0.1:8880/layout-parsing
-```
-
-停止：
-
-```bash
-docker compose down
-```
-
-两个容器共用宿主机模型目录 `/home/mineru_dev/.paddlex`，并挂载到容器内 `/home/paddleocr/.paddlex`。执行 `docker compose down` 不会删除该宿主机目录中的模型。
-
-## 使用现有 uv 环境启动
+## 历史宿主机 uv 启动参考（非 ContractLens 部署入口）
 
 `start_vl.sh` 支持相同的环境变量，并会在启动前校验 GPU 数量与 DP 副本数：
 
@@ -95,7 +66,7 @@ PIPELINE_GPU_ID=4 \
 VLM_GPU_IDS=5,6 \
 VLM_DATA_PARALLEL_SIZE=2 \
 VLM_DATA_PARALLEL_BACKEND=mp \
-./start_vl.sh
+bash start_vl.sh
 ```
 
 脚本不会修改版本库中的 YAML，而是在 `logs/` 下生成本次启动使用的运行时配置。Pipeline 的 VLM 地址会自动替换为 `127.0.0.1:8118/v1`。

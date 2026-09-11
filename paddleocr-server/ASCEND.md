@@ -1,81 +1,66 @@
-# 华为昇腾 NPU 部署
+# 华为昇腾 NPU 推理模块参考
 
-本配置适配 PaddleOCR-VL-1.6 的华为昇腾 910B 部署，沿用 CUDA 版本的双服务架构：
+`paddleocr-server/` 已导入 ContractLens 单仓库。它仍保存昇腾推理配置，但不再是
+ContractLens 的独立部署项目。生产环境必须从仓库根目录启动三服务栈：
 
-- `paddleocr-vl-api`：运行文档预处理和 PP-DocLayoutV3，默认使用物理 NPU 0。
-- `paddleocr-vlm-server`：运行 vLLM VLM 服务，默认使用物理 NPU 1、2，并启动两个数据并行副本。
+```text
+ContractLens api -> PaddleX Pipeline -> PaddleOCR-VL / vLLM
+```
 
-## 前置条件
+不要在本目录执行 `docker compose -f compose.ascend.yaml up`：该历史双服务配置没有
+ContractLens 网关，并可能与根 Compose 的服务名或端口冲突。
 
-- Linux 与 Docker Compose。
-- 华为昇腾 910B，宿主机驱动和固件已正确安装。
-- 宿主机可执行 `npu-smi info`。
-- 宿主机存在 `/usr/local/Ascend/driver`、`/usr/local/bin/npu-smi` 和 `/usr/local/dcmi`。
-- 默认需要 3 张可用 NPU。也可以只给 VLM 分配 1 张卡，并将 `VLM_DATA_PARALLEL_SIZE` 改为 `1`。
+## 当前验证状态
 
-官方镜像内已包含与昇腾适配的 PaddlePaddle、自定义 NPU 插件及 vLLM 运行环境，不应替换为 NVIDIA 镜像。
+根 Ascend Compose 已通过静态配置和脚本语法检查，但尚未在昇腾主机验证镜像、驱动挂载、启动、
+健康检查或真实解析。此前的推理模块双服务验证（如有）仅是历史参考，不能作为根三服务栈已验证的
+证据。
 
-## 启动
+## 生产前置条件
+
+- Linux、Docker Engine 与 Docker Compose v2。
+- 兼容的昇腾 910B、驱动、固件和 NPU 容器运行环境。
+- 宿主机可执行 `npu-smi info`，并提供 `/usr/local/Ascend/driver`、
+  `/usr/local/bin/npu-smi` 与 `/usr/local/dcmi`。
+- 已确认网关、PaddleX 与 vLLM 镜像可用，以及 `PADDLEX_CACHE_DIR` 存在且不得清理。
+- 至少四张可用 NPU：根默认将 Pipeline 分配给 NPU `7`，将三个 VLM 数据并行副本分配给
+  NPU `4,5,6`。可按目标机器调整，但 Pipeline 设备不得和 VLM 设备重叠，且 VLM 设备数必须
+  等于 `VLM_DATA_PARALLEL_SIZE`。
+
+推理镜像已经包含适配昇腾的 PaddlePaddle、NPU 插件与 vLLM 运行环境；不要替换为 NVIDIA 镜像。
+
+## 根目录生产启动
+
+从仓库根目录复制模板并按已核对的 NPU 分配调整环境文件：
 
 ```bash
-cp .env.ascend.example .env.ascend
+cp .env.ascend.template .env.ascend
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
 ```
 
-按实际设备修改 `.env.ascend`。`VLM_NPU_IDS` 中的设备数量必须等于
-`VLM_DATA_PARALLEL_SIZE`，且不应和 `PIPELINE_NPU_ID` 重叠。
+首次启动或网关 Dockerfile、锁定依赖、镜像构建参数变化时才构建网关镜像：
 
 ```bash
-docker compose --env-file .env.ascend -f compose.ascend.yaml config
-docker compose --env-file .env.ascend -f compose.ascend.yaml pull
-docker compose --env-file .env.ascend -f compose.ascend.yaml up -d
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh build
 ```
 
-查看启动日志：
+无论是否构建，都通过同一入口启动并检查三个服务：
 
 ```bash
-docker compose --env-file .env.ascend -f compose.ascend.yaml logs -f paddleocr-vlm-server
-docker compose --env-file .env.ascend -f compose.ascend.yaml logs -f paddleocr-vl-api
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
+CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh ps
 ```
 
-检查服务：
+确认网关 `http://127.0.0.1:8888/openapi.json`、PaddleX
+`http://127.0.0.1:8880/health`、vLLM `/v1/models` 与 `npu-smi info`；随后使用一个
+获准的真实输入执行解析烟测。异常时读取对应服务的有限日志，不循环重启。
 
-```bash
-curl http://127.0.0.1:8880/health
-curl http://127.0.0.1:8880/docs
-npu-smi info
-```
+## 推理配置说明
 
-停止服务：
+根 [`compose.ascend.yaml`](../compose.ascend.yaml) 保留昇腾专有的 `privileged`、driver、
+`npu-smi`、DCMI 挂载和 `ASCEND_RT_VISIBLE_DEVICES`。Pipeline 在容器内使用 `npu:0`，
+因为可见物理设备会被重新编号。两个推理服务以只读方式挂载整个本目录，因此
+`docker/vlm-entrypoint-ascend.sh`、`PaddleOCR-VL-1.6.yaml` 和 `vllm_config.yaml` 仍是
+推理配置事实源。
 
-```bash
-docker compose --env-file .env.ascend -f compose.ascend.yaml down
-```
-
-## 常用调整
-
-离线环境将两个镜像标签改为：
-
-```dotenv
-ASCEND_API_IMAGE_TAG=latest-huawei-npu-offline
-ASCEND_VLM_IMAGE_TAG=latest-huawei-npu-offline
-```
-
-单张 VLM NPU：
-
-```dotenv
-PIPELINE_NPU_ID=0
-VLM_NPU_IDS=1
-VLM_DATA_PARALLEL_SIZE=1
-```
-
-若启动或压测时发生 HBM OOM，依次降低
-`VLM_GPU_MEMORY_UTILIZATION`、`VLM_MAX_NUM_SEQS` 和输入并发。
-
-容器通过 `ASCEND_RT_VISIBLE_DEVICES` 接收物理卡号。容器内只暴露被分配的设备，
-所以 API 的启动参数固定使用 `npu:0`。
-
-## 说明
-
-该文件按 PaddleOCR 官方昇腾方案使用 `privileged: true`，并挂载宿主机 Ascend
-driver、`npu-smi` 与 DCMI。若生产环境需要收紧权限，应在目标驱动版本和设备节点
-上完成验证后，再改为显式 `devices` 映射。
+本目录的 `compose.ascend.yaml` 仅保留为导入前的推理模块参考，不能替代上述根目录流程。

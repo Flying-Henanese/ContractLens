@@ -109,3 +109,22 @@ def test_linux_docker_helper_wraps_expected_compose_actions():
     assert "CONTRACTLENS_ENV_FILE" in helper
     assert "compose.ascend.yaml" in helper
     assert not (ROOT / "scripts" / "docker.ps1").exists()
+
+
+def test_imported_inference_module_defers_production_lifecycle_to_root():
+    agent_instructions = (ROOT / "paddleocr-server" / "AGENTS.md").read_text(encoding="utf-8")
+    ascend_guide = (ROOT / "paddleocr-server" / "ASCEND.md").read_text(encoding="utf-8")
+    cuda_reference = (ROOT / "paddleocr-server" / "compose.yaml").read_text(encoding="utf-8")
+    ascend_reference = (ROOT / "paddleocr-server" / "compose.ascend.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "scripts/docker.sh" in agent_instructions
+    assert "scripts/docker.sh" in ascend_guide
+    assert (
+        "The root Ascend stack has passed static Compose and shell checks only."
+        in agent_instructions
+    )
+    assert "尚未在昇腾主机验证" in ascend_guide
+    assert "ContractLens production must use the root" in cuda_reference
+    assert "ContractLens production must use the root" in ascend_reference

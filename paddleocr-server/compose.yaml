@@ -1,3 +1,5 @@
+# Historical inference-only reference. ContractLens production must use the root
+# compose.yaml through ../scripts/docker.sh so api, PaddleX, and vLLM share one lifecycle.
 services:
   paddleocr-vlm-server:
     image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:${VLM_IMAGE_TAG:-latest-nvidia-gpu}
