@@ -14,10 +14,13 @@ For the current Ascend production workflow and verification status, see
 
 一个 PaddleOCR-VL-1.6 服务化部署示例：使用单个 PP-DocLayoutV3 Pipeline 完成版面分析，再将裁剪后的版面子图并发发送给多个 vLLM 数据并行副本。
 
-## 架构
+## 推理模块内部链路
 
 ```text
-POST /layout-parsing
+ContractLens gateway（:8888，生产入口）
+        |
+        v
+POST /layout-parsing（PaddleX，Compose 内部）
         |
         v
 PaddleOCR-VL Pipeline                         物理 GPU 4
