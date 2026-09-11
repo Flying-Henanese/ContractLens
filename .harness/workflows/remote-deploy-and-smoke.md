@@ -36,11 +36,11 @@
    配置也由只读目录挂载读取，变更后须重启或更新相应容器以重新加载。`uv sync --frozen` 只在
    Dockerfile 的镜像构建阶段执行；T4 宿主机不单独同步 Python 环境。不得用 `pkill`、递归删除或
    临时后台进程替代 Compose 管理。
-7. 确认 `api` 容器处于运行且健康状态。若状态异常，读取有限尾部日志后停止部署并报告，
-   不得循环重启：
+7. 确认 `api`、`paddleocr-vl-api` 和 `paddleocr-vlm-server` 都处于运行且健康状态。任一服务
+   异常时，读取该服务的有限尾部日志后停止部署并报告，不得循环重启：
 
    ```powershell
-   ssh t4 "cd /home/mineru_dev/projects/ContractLens && docker compose -f compose.yaml logs --tail 200 api"
+   ssh t4 "cd /home/mineru_dev/projects/ContractLens && docker compose -f compose.yaml logs --tail 200 <service>"
    ```
 
 8. 检查 `http://192.168.0.67:8888/openapi.json` 和

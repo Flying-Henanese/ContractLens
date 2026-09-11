@@ -101,8 +101,10 @@ new file.
 
 Neither mount replaces the image-managed Python interpreter or locked dependencies.
 Changes to `pyproject.toml`, `uv.lock`, a Dockerfile, or image build arguments require
-a gateway image build. Changes limited to Compose/environment configuration or mounted
-source/configuration require a container update or restart, not an image rebuild.
+a gateway image build. A change limited to `./src` is picked up by Uvicorn reload;
+Compose/environment changes require a container update or recreation, while mounted
+`paddleocr-server` entrypoint or Pipeline configuration requires an inference-service
+restart or recreation. None of those latter changes requires an image rebuild.
 
 ## Review and lifecycle commands
 
