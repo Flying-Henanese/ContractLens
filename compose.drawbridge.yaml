@@ -1,0 +1,128 @@
+name: contractlens
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    entrypoint:
+      - uvicorn
+      - pdf_parser.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8888"
+    ports:
+      - "8888:8888"
+    environment:
+      PYTHONPATH: /app/src
+      PDF_PARSER_ENDPOINT: http://paddleocr-vl-api:8080
+      PDF_PARSER_TIMEOUT_SECONDS: "120"
+      PDF_PARSER_RETRIES: "2"
+      PDF_PARSER_CONCURRENCY: "1"
+      PDF_PARSER_USE_LAYOUT_DETECTION: "true"
+      PDF_PARSER_LAYOUT_THRESHOLD: "0.5"
+      PDF_PARSER_TRUST_ENV: "false"
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    volumes:
+      - type: bind
+        source: src
+        target: /app/src
+        read_only: true
+    stop_grace_period: 30s
+    depends_on:
+      paddleocr-vl-api:
+        condition: service_healthy
+
+  paddleocr-vlm-server:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:latest-nvidia-gpu
+    user: root
+    init: true
+    ports:
+      - "8118:8118"
+    environment:
+      CUDA_VISIBLE_DEVICES: "5,6"
+      VLM_MODEL: PaddleOCR-VL-1.6-0.9B
+      VLM_DATA_PARALLEL_SIZE: "2"
+      VLM_DATA_PARALLEL_BACKEND: mp
+      VLM_GPU_MEMORY_UTILIZATION: "0.8"
+      VLM_MAX_NUM_SEQS: "16"
+      VLM_MAX_NUM_BATCHED_TOKENS: "16384"
+      NCCL_DEBUG: INFO
+      NCCL_P2P_DISABLE: "1"
+      NCCL_IB_DISABLE: "1"
+    command:
+      - /bin/bash
+      - /opt/paddleocr-server/docker/vlm-entrypoint.sh
+    volumes:
+      - type: bind
+        source: paddleocr-server
+        target: /opt/paddleocr-server
+        read_only: true
+      - paddlex-cache:/home/paddleocr/.paddlex
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["5", "6"]
+              capabilities: [gpu]
+    shm_size: 64gb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8118/v1/models >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 900s
+
+  paddleocr-vl-api:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-vl:latest-nvidia-gpu
+    user: root
+    init: true
+    depends_on:
+      paddleocr-vlm-server:
+        condition: service_healthy
+    environment:
+      CUDA_VISIBLE_DEVICES: "4"
+    command:
+      - paddlex
+      - --serve
+      - --pipeline
+      - /opt/paddleocr-server/PaddleOCR-VL-1.6.yaml
+      - --device
+      - gpu:0
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    ports:
+      - "8880:8080"
+    volumes:
+      - type: bind
+        source: paddleocr-server
+        target: /opt/paddleocr-server
+        read_only: true
+      - paddlex-cache:/home/paddleocr/.paddlex
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["4"]
+              capabilities: [gpu]
+    shm_size: 64gb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  paddlex-cache: {}
