@@ -70,6 +70,8 @@ services:
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver
       - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
       - /usr/local/dcmi:/usr/local/dcmi
+      - /etc/ascend_install.info:/etc/ascend_install.info:ro
+      - /var/log/npu:/var/log/npu
     shm_size: 64gb
     restart: unless-stopped
     healthcheck:
@@ -108,6 +110,8 @@ services:
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver
       - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
       - /usr/local/dcmi:/usr/local/dcmi
+      - /etc/ascend_install.info:/etc/ascend_install.info:ro
+      - /var/log/npu:/var/log/npu
     shm_size: 64gb
     restart: unless-stopped
     healthcheck:
