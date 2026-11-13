@@ -38,5 +38,5 @@ for ((round=1; round<=REPEATS; round++)); do
         contractlens-paddleocr-vlm-server-1 contractlens-pipeline-1-1 contractlens-pipeline-2-1 \
         > "output/smoke/${run}/container-resources.txt"
     docker logs contractlens-paddleocr-vl-api-1 2>/dev/null | \
-        rg --fixed-strings "${run}-" > "output/smoke/${run}/proxy.jsonl"
+        grep -F "${run}-" > "output/smoke/${run}/proxy.jsonl"
 done
