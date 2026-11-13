@@ -17,7 +17,11 @@ benchmark() {
         -v "${PWD}:/work" -w /work -e PYTHONPATH=/work/src \
         --entrypoint python "${CLIENT_IMAGE}" scripts/benchmark_replicas.py \
         --pdf tmp/pdfs/book.pdf --run "${run}" --pages "${pages}" --concurrency "${concurrency}" "$@" || status=$?
-    git rev-parse HEAD > "output/smoke/${run}/revision.txt"
+    if [[ -f RELEASE_COMMIT ]]; then
+        cat RELEASE_COMMIT > "output/smoke/${run}/revision.txt"
+    else
+        git rev-parse HEAD > "output/smoke/${run}/revision.txt"
+    fi
     docker inspect contractlens-paddleocr-vlm-server-1 contractlens-pipeline-1-1 contractlens-pipeline-2-1 \
         --format '{{.Name}} {{.State.Status}} {{.State.Health.Status}} {{.RestartCount}}' \
         > "output/smoke/${run}/container-state.txt"
@@ -32,6 +36,7 @@ benchmark() {
             return "${status}"
         fi
         echo "${run}: completed with failures; inspect summary.json"
+        return "${status}"
     fi
 }
 benchmark "${LABEL}-warm" 1,2,80,160 2

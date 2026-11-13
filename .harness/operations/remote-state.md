@@ -4,6 +4,23 @@
 
 ## 最近观测
 
+观测日期：2026-11-13（双卡共置模拟V100，实际T4）
+
+分支`codex/two-gpu-colocated-deployment`，测量时代码`87c5645`，远端工作区干净。
+使用独立`.env.two-gpu`及`bash scripts/docker-two-gpu.sh ps`检查：
+api、paddleocr-vl-api（Nginx）、pipeline-1/2、paddleocr-vlm-server全部healthy。
+已通过docker inspect和nvidia-smi确认Pipeline1/GPU2、Pipeline2/GPU3，VLM可见2,3、TP1/DP2/mp。
+显存比例0.6，max-num-seqs16、max-num-batched-tokens16384，每worker子图并发16。
+旧`.env`保留四worker方案参数未改，Ascend未改。
+
+固定样本48/48成功且严格校验通过，中位0.41742页/s。整书按用户要求提前停止，
+保留231条完成记录、223成功、8超时；GPU2/3区间平均76.62%/48.71%，偏载与长尾尚在。
+三个推理容器OOMKilled=false、restart=0。未补跑8888网关真实解析烟测，不作为V100验收。
+证据及限制见[双卡报告](../reports/benchmarks/2026-11-13-two-gpu-colocated.md)，
+配置步骤见[部署手册](../../deploy/two-gpu/README.md)。
+
+## 历史观测（2026-11-13，T4 CUDA 四 Pipeline 配置，已被双卡方案替代）
+
 观测日期：2026-11-13（T4 CUDA 四 Pipeline 配置）
 
 远端目录 `/home/mineru_dev/projects/ContractLens` 位于分支

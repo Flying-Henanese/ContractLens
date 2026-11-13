@@ -87,3 +87,12 @@ T4 当前验证方案由根 Compose 的 CUDA overlay 提供：Nginx 替代内部
 2026-11-13 的全量对照显示吞吐提升约 81.3%，但 4 worker 新增 4 个超时页；因此记录为
 当前可复用配置，稳定性推广门槛尚未通过。T4 的易变运行状态见
 [`remote-state.md`](../operations/remote-state.md)。
+
+### 双卡共置（CUDA 可选）
+
+`compose.colocated.yaml` 叠加在基础和 replicas 配置后，将 pipeline-1/2 分别映射到
+`COLOCATED_GPU_1/2`，共享 vLLM 可见同两张卡、TP=1/DP=2。使用
+`scripts/docker-two-gpu.sh` 代理到统一 `scripts/docker.sh` 生命周期入口，读取独立
+`.env.two-gpu`；不改变原单worker、四worker或Ascend方案。物理共置不提供请求与rank的固定配对。
+显存预算需要为Pipeline预留，V100仍须现场验收；配置步骤见
+[双卡部署手册](../../deploy/two-gpu/README.md)。

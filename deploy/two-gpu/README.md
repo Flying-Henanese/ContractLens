@@ -5,6 +5,10 @@
 PaddleOCR 官方提示 CC7.x 的 T4/V100 使用 vLLM 可能超时或 OOM：
 https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/PaddleOCR-VL.html
 
+当前T4验证：三轮固定样本48/48成功、严格校验通过，中位0.417页/s；
+整书按用户要求提前停止，231条完成记录中223成功、8超时，存在GPU偏载。
+未通过整书无超时验收，未执行业务网关真实解析烟测；V100需现场验收后再上线。
+
 ## 1. 交付物及边界
 
 代码包包含 src、Dockerfile、依赖锁、Compose、推理入口、测试脚本和本手册，不包含 Docker 镜像层、模型权重、真实 PDF、解析正文、私钥或已配置 .env。
@@ -100,6 +104,8 @@ nvidia-smi
 ## 5. 真实文档验收与性能复测
 
 用户PDF不随代码包分发，按授权自行放到 `tmp/pdfs/book.pdf`。
+完整流程也可用 `BENCHMARK_CLIENT_IMAGE=pdf-parser:two-gpu bash scripts/benchmark_two_gpu.sh unique-label`，
+它先检查健康状态，再执行预热、三轮16页和一轮整书；默认端口不变才可直接使用。
 将网关镜像名用于客户端（测试脚本从工作目录挂载），真实结果只写到output/smoke。
 
 ```bash
@@ -121,6 +127,27 @@ docker run --rm --user "$(id -u):$(id -g)" --gpus all --network host \
 独立页诊断可保留成功页，不代表网关文档部分成功；生产网关仍然fail-fast。
 观察 summary.json、pages.jsonl、telemetry.jsonl：成功页/s、超时、严格校验、每rank Running/Waiting、GPU负载/显存峰值。
 完整文档及API路径也须验收，不能只看独立页测试。异常页未解决前不得声称全书无损通过。
+下面用运维自备的短PDF（例如同一测试文档前2页）检查网关路径：
+
+```bash
+# 准备 tmp/pdfs/smoke.pdf 后执行：
+docker run --rm --user "$(id -u):$(id -g)" --network host \
+  -v "$PWD:/work" -w /work -e PYTHONPATH=/work/src \
+  --entrypoint pdf-parser pdf-parser:two-gpu parse tmp/pdfs/smoke.pdf \
+  -o output/smoke/cli_result.json --endpoint http://127.0.0.1:8880 \
+  --timeout 120 --retries 0 --concurrency 2
+curl --fail --noproxy '*' --max-time 310 \
+  -F 'file=@tmp/pdfs/smoke.pdf;type=application/pdf' \
+  http://127.0.0.1:8888/api/v1/documents/parse -o output/smoke/api_result.json
+for result in cli_result.json api_result.json; do
+  docker run --rm --user "$(id -u):$(id -g)" \
+    -v "$PWD:/work" -w /work --entrypoint python pdf-parser:two-gpu \
+    .harness/scripts/validate_result.py "output/smoke/$result"
+done
+```
+
+本次T4固定样本及整书结果见
+[测试报告](../../.harness/reports/benchmarks/2026-11-13-two-gpu-colocated.md)。
 
 ## 6. 日常操作、排障与回滚
 
