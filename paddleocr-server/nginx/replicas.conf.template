@@ -1,0 +1,29 @@
+# resolve + shared zone support Docker worker IP changes (NGINX >= 1.27.3).
+resolver 127.0.0.11 valid=5s ipv6=off;
+log_format pipeline_json escape=json '{"time":"$time_iso8601","id":"$http_x_request_id","upstream":"$upstream_addr","status":$status,"upstream_status":"$upstream_status","connect":"$upstream_connect_time","response":"$upstream_response_time","total":$request_time}';
+upstream pipeline_workers {
+    zone pipeline_workers 64k;
+    least_conn;
+    server pipeline-1:8080 resolve max_fails=1 fail_timeout=10s;
+    server pipeline-2:8080 resolve max_fails=1 fail_timeout=10s ${PIPELINE_2_STATE};
+}
+server {
+    listen 8080;
+    client_max_body_size 64m;
+    client_body_buffer_size 128k;
+    client_body_temp_path /var/cache/nginx/client_temp;
+    access_log /dev/stdout pipeline_json;
+    location / {
+        proxy_pass http://pipeline_workers;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-Request-ID $http_x_request_id;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+        proxy_next_upstream off;
+        add_header X-Pipeline-Upstream $upstream_addr always;
+    }
+}

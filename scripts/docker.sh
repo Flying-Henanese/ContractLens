@@ -21,6 +21,17 @@ case "${CONTRACTLENS_PLATFORM}" in
         ;;
 esac
 
+# Opt-in CUDA experiment; the Ascend deployment is deliberately excluded.
+if [[ "${CONTRACTLENS_PIPELINE_MODE:-single}" == "replicas" ]]; then
+    if [[ "${CONTRACTLENS_PLATFORM}" != "cuda" ]]; then
+        echo "Pipeline replicas experiment supports CUDA only." >&2
+        exit 2
+    fi
+    COMPOSE_REPLICAS_ARGS=(-f "${PROJECT_ROOT}/compose.replicas.yaml")
+else
+    COMPOSE_REPLICAS_ARGS=()
+fi
+
 readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
 COMPOSE_ENV_ARGS=()
 if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
@@ -28,7 +39,7 @@ if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
 fi
 
 compose() {
-    docker compose "${COMPOSE_ENV_ARGS[@]}" -f "${COMPOSE_FILE}" "$@"
+    docker compose "${COMPOSE_ENV_ARGS[@]}" -f "${COMPOSE_FILE}" "${COMPOSE_REPLICAS_ARGS[@]}" "$@"
 }
 
 if ! command -v docker >/dev/null 2>&1; then

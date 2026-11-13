@@ -202,3 +202,25 @@ uv run pytest
 - 公式、图表识别依赖服务端启用相应模型。
 - 当前采用失败即停止策略，不生成不完整的“成功”结果；断点续跑将在后续版本加入。
 - 跨页表格目前只做候选识别，不合并表格 HTML 或正文。
+
+### CUDA Pipeline 副本实验
+
+仅在独立验证分支使用 `CONTRACTLENS_PIPELINE_MODE=replicas bash scripts/docker.sh up`，
+要求 Docker Compose >= 2.24.4。该模式增加 Nginx 与两个独立 Pipeline，共享原 vLLM，
+不适用于 Ascend。原单 Pipeline 部署仍是默认。代理使用固定版本及 digest 的官方
+Nginx Alpine；开源动态 DNS 功能见 [Nginx upstream 文档](https://nginx.org/en/docs/http/ngx_http_upstream_module.html)。
+
+`PIPELINE_2_STATE=down` 是单 worker 对照；留空启用两个 worker。两组均启动两个模型副本
+以固定显存占用，单 worker 组第二个副本空闲。`PIPELINE_SUBGRAPH_CONCURRENCY=8|16`
+分别控制每个副本的子图并发。Pipeline 的原串行保护保持不变；实验容器关闭自动重启。
+代理只公开原 8880 端口，不记录正文，不重试 POST。客户端端到端预算仍为 120 秒。
+实验客户端最多 8 个在途页面且不重试；此入口尚未定义生产过载拒绝策略。
+
+性能测试：在已具备项目依赖的环境执行
+`python scripts/benchmark_replicas.py --pdf tmp/pdfs/book.pdf --run A-1 --pages 1,2,3,4,5,6,7,8`。
+使用 `--pages all` 验证整书；每页请求、唯一页号、质量验证、端到端延迟、DP Prometheus
+指标及 GPU 利用率写入 `output/smoke/<run>/`，拆分页写入 `tmp/pdfs/`。
+失败后停止提交新页，未提交页有明确终态；请求成功与严格质量门槛分别统计。
+
+回滚：取消实验客户端后，移除 `CONTRACTLENS_PIPELINE_MODE` 并使用原参数运行
+`bash scripts/docker.sh up`，由统一生命周期入口恢复原单 Pipeline 拓扑。

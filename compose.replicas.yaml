@@ -1,0 +1,63 @@
+# CUDA-only opt-in overlay: CONTRACTLENS_PIPELINE_MODE=replicas bash scripts/docker.sh up
+x-pipeline: &pipeline
+  image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-vl:${API_IMAGE_TAG:-latest-nvidia-gpu}
+  user: root
+  init: true
+  restart: "no"
+  depends_on:
+    paddleocr-vlm-server:
+      condition: service_healthy
+  environment:
+    CUDA_VISIBLE_DEVICES: ${PIPELINE_GPU_ID:-1}
+    PIPELINE_SUBGRAPH_CONCURRENCY: ${PIPELINE_SUBGRAPH_CONCURRENCY:-16}
+  command: ["bash", "/opt/paddleocr-server/docker/pipeline-replicas-entrypoint.sh"]
+  volumes:
+    - ./paddleocr-server:/opt/paddleocr-server:ro
+    - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
+  shm_size: 64gb
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 120s
+
+services:
+  paddleocr-vl-api: !override
+    image: ${PIPELINE_PROXY_IMAGE:-nginx:1.29.7-alpine@sha256:e7257f1ef28ba17cf7c248cb8ccf6f0c6e0228ab9c315c152f9c203cd34cf6d1}
+    init: true
+    restart: "no"
+    environment:
+      # 'down' for the one-worker control; empty for two workers.
+      PIPELINE_2_STATE: ${PIPELINE_2_STATE:-}
+      NGINX_ENVSUBST_FILTER: ^PIPELINE_2_STATE$
+    ports:
+      - "${API_PORT:-8880}:8080"
+    volumes:
+      - ./paddleocr-server/nginx/replicas.conf.template:/etc/nginx/templates/default.conf.template:ro
+    tmpfs:
+      - /var/cache/nginx:size=64m,mode=1777
+    depends_on:
+      pipeline-1:
+        condition: service_healthy
+      pipeline-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  pipeline-1:
+    <<: *pipeline
+  pipeline-2:
+    <<: *pipeline
+  paddleocr-vlm-server:
+    # Preserve the first failure for diagnosis instead of hiding it with restarts.
+    restart: "no"

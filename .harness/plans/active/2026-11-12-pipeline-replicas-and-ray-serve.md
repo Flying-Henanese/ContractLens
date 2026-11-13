@@ -1,0 +1,181 @@
+---
+status: active
+owner: Codex
+created: 2026-11-12
+updated: 2026-11-13
+scope:
+  - paddleocr-server
+  - compose-runtime
+  - inference-benchmark
+supersedes:
+  - single-Pipeline deployment topology in architecture/README.md (proposed)
+blocked_by: []
+---
+
+# Nginx 多 Pipeline 容器验证与 Ray Serve 条件迁移计划
+
+## 目标与用户价值
+
+计划实施日期：2026-11-13（Asia/Shanghai）。本文件是执行计划；2026-11-13 已获用户授权在 NVIDIA T4 宿主机实施，明确排除 Ascend 配置改动。
+
+第一阶段明确采用 Nginx 分发单页请求，让两个独立 PaddleX Pipeline 容器共享一个 vLLM 服务入口（后端 DP=4），验证跨页并行能否提高成功页吞吐。Nginx 部署先作为可独立交付的方案；只有收益可重复、结果与稳定性达标，且确认需要副本托管、动态扩缩容或多节点管理时，才进入第二阶段评估 Ray Serve。阶段一达标不意味着必须替换 Nginx。
+
+假设：单页请求在普通 Serving 中串行执行，不同页面的子图不能持续叠加，导致 VLM 的有效批量偏小。增加独立 Pipeline 应改善供给，但收益尚未证明。GPU 利用率是辅助指标，不以“拉满 GPU”替代吞吐、延迟和正确性验收。
+
+## 当前事实与约束
+
+- 网关只通过 PaddleX `layout-parsing` 协议调用推理模块，不直接访问 vLLM。当前 PDF 按页拆分，每次请求一个页面；本计划继续保持此粒度，不采用整份 PDF 提交。
+- 此前 T4 运行环境为 Pipeline GPU 1，VLM GPU 2～5、TP=1、DP=4；这些是历史观测，实施前必须重新确认空闲设备、镜像 digest、版本和实际参数。
+- 2026-11-12 采样：40 秒、py-spy 25 Hz（包含 idle 线程），Pipeline GPU 平均 2.4%，四张 VLM GPU 平均 17.5%～20.0%；当时运行时 `SERVING_SERIAL_PIPELINE_CALLS=True`，Pipeline 主要等待识别结果，vLLM 等待队列为空。不是严格受控基准，不能据此承诺提速比例。
+- vLLM DP 主线程出现 `all_reduce` 与 dummy batch。栈驻留比例不等于通信成本或可消除的延迟，不预先判定 DP=4 是瓶颈。
+- 曾发生 FlexAttention / Dynamo `recompile_limit` 异常，导致引擎退出并自动重启。必须先建立无崩溃的可重复基线；若运行环境已有补丁，记录其内容和生效值，不能把稳定性修复收益混入副本扩容收益。
+- 现有单页简单样本的耗时不能代表整本书。既有书籍试跑因崩溃中断，不能作为完整吞吐结果。
+- 本地与远端此前分支、Compose 文件不同；本地 `compose.ascend.yaml` 有用户改动。实施前重新检查，不覆盖无关改动，不直接把本地整个目录复制到远端。
+- 网关协议、归一化、页序、坐标与 fail-fast 契约保持。任一文档页失败不得形成伪成功的整份文档结果；压测可以分别记录单页请求失败。
+- 本计划拟替代的是“仅一个 Pipeline 进程”的部署拓扑，不替代模块边界及统一 Compose 生命周期。阶段一由 Nginx 提供 `paddleocr-vl-api:8080`，实际 PaddleX 服务命名为 `pipeline-1`、`pipeline-2`；后续评估 Ray 时保持该兼容入口。Nginx 作为推理模块内部入口，不承载网关业务逻辑。
+- 与 [整份 PDF 提交计划](2026-07-28-whole-document-submission.md) 的输入粒度目标不同；本实验明确采用逐页请求，不同时实施该计划。与 [统一推理栈计划](2026-09-07-unified-inference-stack.md) 协调，继续使用根 Compose 管理整套服务。
+
+## 阶段一：Nginx + 两个 Pipeline 容器，共享 vLLM DP=4
+
+### 1.1 形成可回滚、可复测的候选部署
+
+```text
+api（业务网关）
+  -> paddleocr-vl-api:8080（Nginx 内部请求分发入口）
+       -> pipeline-1（独立 PaddleX Pipeline） --+
+       -> pipeline-2（独立 PaddleX Pipeline） --+-> paddleocr-vlm-server:8118/v1
+       -> pipeline-N（按实验增加）            --+       -> DP0 / DP1 / DP2 / DP3
+```
+
+- 在已确认的开发分支中实现。在 `paddleocr-server/` 保存 Nginx 配置，根 Compose 新增 Nginx 服务并声明两个 Pipeline 服务，调整 `scripts/docker.sh` 以支持一套生命周期；不向业务网关添加实例选择逻辑，不引入 Swarm，也不依赖 Docker DNS 实现请求级负载均衡。
+- 第一轮固定两个 Pipeline 容器；保留内部串行保护，不让线程并发共享同一 Pipeline 对象。A 组使用 Nginx + 一个 worker，B/C 组使用相同 Nginx + 两个 worker，避免把新增代理的影响与副本收益混淆。可额外记录旧直连部署作为诊断参考，不代替主对照。
+- Nginx upstream 明确列出内部 worker 服务名，采用 `least_conn`；每个完整页面请求交给一个 worker，响应从同一请求链返回。透传 `/layout-parsing` 的路径、请求体、响应状态和 PaddleX JSON，不修改坐标或业务契约。
+- `least_conn` 只按连接数估计负载，不知道 Pipeline 内部队列、页面复杂度或真实空闲状态；不承诺严格一 worker 一请求、最优排队或绝对均匀分配。暂不自研“空闲 worker”调度器。
+- 按用户要求优先采用体积较小的官方 Nginx Alpine 变体，使用 `nginx:<具体版本>-alpine` 并记录 digest；不使用浮动 `latest`，不为代理额外安装 Python、编译工具或其他非必要依赖。实施时核对目标 CPU 架构、镜像大小及所需 upstream 功能，不在计划中臆定版本或大小。按该版本核实容器重建后 upstream DNS 更新/重载方式；测试 worker 换 IP 后可恢复路由，不硬编码容器 IP，不假定扩容会自动被发现。
+- 只有 Nginx 分发入口暴露原 Pipeline 端口，worker 只开放容器网络内 8080，不争用宿主机固定端口。Compose 分别检查 worker 就绪状态，Nginx 启动时等待依赖就绪；运行中记录 upstream 被动失败处理，不把 Nginx 自身存活当成所有 Pipeline 或共享 VLM 就绪，也不把商业版主动检查能力默认视为开源版自带。
+- 两个 worker 都访问同一个 vLLM 入口，vLLM 模型、镜像、DP、TP、显存比例、token/序列限制保持与本轮基线一致。
+- 先尝试两个 Pipeline 共用已选定的 Pipeline GPU，记录每个模型副本的显存、CPU、内存和 GPU 竞争；容量不足时停止，不能假定原进程显存乘实例数就是峰值。若改用额外设备，建立独立实验组，不与同卡扩容混为一谈。
+- 本轮测试用客户端最大并发 8 限制在途请求；请求超时覆盖排队并计入端到端时延。不声称开源 Nginx 的 `least_conn` 自动提供有界任务队列。正式开放流量前需明确入口在途/排队上限、过载拒绝及错误映射；仅用连接上限也不能证明 Pipeline 内部不会排队。
+- 根据单页 PDF 的 Base64 JSON 体积设置 `client_max_body_size`，检查请求/响应缓冲和临时文件位置，避免代理默认限制导致 413 或将正文写入普通诊断目录。仅在必要时调整缓冲并记录，不把大文件缓冲开销误判为推理瓶颈。
+- 明确配置连接、发送及读取超时，核实 Nginx 的读超时不是整个请求的总时间预算；最终仍受现有 API 端到端超时约束，不为测试静默放宽业务契约。禁用代理自动重发推理 POST（例如明确配置 `proxy_next_upstream off` 并验证行为），避免重复计算掩盖失败。
+- 记录客户端重试、网关重试、代理重试及实际后端尝试数。负载测试客户端不自动重试，不能把网关内部重试误称为完全没有重试。
+- Nginx 日志只记录请求关联 ID、upstream 地址、状态、连接/响应/总耗时，不记录上传正文、Base64 或完整响应。用 worker 地址和请求起止时间验证两实例确实重叠处理页面。
+
+### 1.2 建立基线并执行受控对照
+
+实施预检包含于本阶段；不另起架构迁移阶段：
+
+1. 阅读 [远端状态](../../operations/remote-state.md)、[远端目标](../../operations/remote-targets.md) 和 [部署工作流](../../workflows/remote-deploy-and-smoke.md)。核对远端工作区、分支、提交；不干净则停止部署，不 reset、清理或强制覆盖。
+2. 记录当前 Compose、环境参数（仅白名单，禁止泄漏凭据）、镜像 digest、PaddleX/vLLM/Torch 版本、编译设置、GPU 设备映射和容器 restart count。确认既有压力来源，避免他人负载污染实验。
+3. 选择那本 407 页的《Generative AI on Kubernetes》作为主要样本。源文件从用户已提供的 Downloads 路径读取，记录文件 SHA-256、页数和固定页清单；路径缺失时再定位，不改动源 PDF。用于调试的小集合应同时覆盖文字、表格、图示页面；最终验收覆盖整本书。
+4. 每页拆成独立 PDF，每次只发一页，客户端最多 8 个在途请求，完成一个再补一个。不要直接上传整本，也不要把 API 内部每文档分页并发 1 误当成全局客户端并发。
+5. 先验证稳定基线，包括曾触发错误的起始页面集合。若再次崩溃，停止继续加压，诊断并固定修复环境后重新建立基线；不自动循环重启。
+6. 预热所有模型后，用固定页面集合做 A/B/A 对照，分别运行三次计时测试。冷启动、预热、正式测量分别记录。
+
+建议实验矩阵（每行均维持 vLLM DP=4、客户端并发 8）：
+
+| 实验组 | Pipeline 数 | 每实例子图并发 | 理论合计上限 | 用途 |
+| --- | ---: | ---: | ---: | --- |
+| A | 1 | 16 | 16 | 基线 |
+| B | 2 | 8 | 16 | 优先隔离跨页重叠效果 |
+| C | 2 | 16 | 32 | 在 B 后单独验证增加供给量 |
+| D（可选） | 4 | 选定且明确记录 | 明确记录 | 资源充足且两实例有效后再验证 |
+
+子图并发只是上限，不等于实际序列数。所有参数必须与真实运行值核对；A/B/C 不同时修改前处理开关、模型、布局阈值、后端版本和编译策略。
+
+### 1.3 指标、正确性与进入第二阶段的门槛
+
+- 主要指标：成功页数/秒、整批完成时间、端到端 p50/p95/p99、HTTP/传输失败率、超时、容器/引擎重启次数。记录每页起止时间、Nginx upstream 地址和时延、worker ID，证明请求实际重叠执行；单独分类 413、代理 502/504 与推理失败。
+- 辅助指标：各 GPU 的利用率与显存、CPU/RAM；vLLM 每 rank Running/Waiting、生成吞吐和 KV cache；Pipeline 准备/等待阶段的采样。py-spy 的 idle 线程不可混合当作 CPU 热点比例。
+- 所有输入页必须有唯一且可追踪的终态，结果按输入页号关联；禁止串页、重复页或漏页。严格契约验证与请求成功分别统计；空白页造成的非空正文质量门槛失败必须分类说明，不能改验证器掩盖。
+- 先对同一页集合重复测试，区分模型固有波动和架构变化；检查正文、表格结构、尺寸、坐标和印章引用，不强求 OCR 字符逐次完全一致。
+- 建议决策门槛：固定集合三次测量的成功吞吐中位数较基线提升至少 20%，且无新增模型崩溃或结果结构回归。20% 是本计划的工程决策标准，不是已观察到的收益。
+- p95 应不高于基线的 1.2 倍，且不得新增超时；若吞吐改善但尾延迟超标，将其记录为权衡，不能自动判定达标。
+- 选定候选组后跑完整 407 页，并与相同数据的完整基线比较；未完成、受外部负载干扰、存在未解释失败或收益不可重复时，不进入第二阶段。
+- 若无改善，记录否定结果，回到 VLM 单请求生成、有效批量、DP 调度和硬件瓶颈分析；不以增加 Ray 组件替代性能诊断。
+
+## 阶段二：阶段一收益成立且有托管需求时，再评估 Ray Serve
+
+阶段一达标后先交付 Nginx 多容器模式，并记录是否存在必须解决的副本恢复、动态扩缩容或多节点需求。没有这些需求时可继续保留 Nginx，本阶段不自动执行；确认进入后再按下列步骤实施。
+
+```text
+api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
+        -> replica actor 1：独立 Pipeline --+
+        -> replica actor 2：独立 Pipeline --+-> 共享 vLLM 服务 -> DP0～DP3
+        -> replica actor N：独立 Pipeline --+
+```
+
+### 2.1 先补齐版本、设备和接口证据
+
+- 核实实际目标镜像、CPU 架构和 Ray/PaddleX/vLLM 版本。此前官方昇腾镜像构建层查得 Ray 2.48.0、vLLM 0.12.0；不代表公司实际缓存镜像相同，也不代表 Ray Serve/FastAPI 依赖齐全。需要验证 `ray.serve` 可用、版本配套和设备资源调度。
+- 阶段一优先 T4 CUDA 验证；若阶段二转到昇腾，先在该环境重复阶段一的基线和收益验证。更换硬件、镜像或后端版本所得变化，不归因于 Ray Serve。
+- vLLM 仍为独立服务。使用 Ray Serve 管理 Pipeline，不要求把 vLLM DP backend 从 mp 改成 ray，也不要求把模型副本纳入同一 Ray 集群。
+- 不采用 NVIDIA 专用资源配置冒充昇腾调度；核实设备可见性与 actor 分配。逻辑资源份额不构成显存硬隔离，多个 actor 的模型内存需实测。
+
+### 2.2 实现固定副本，先追平阶段一
+
+- replica 初始化时创建一次 Pipeline，保持模型常驻；明确使用的 Pipeline 创建方式、配置路径及模型缓存，不在每次请求里重新加载模型。
+- 每个 actor 最多执行一个页面推理任务；按目标 Ray 版本验证 `max_ongoing_requests=1` 与实际执行语义，不仅设置参数就假定线程安全。同步推理避免阻塞 Serve 控制事件循环，使用目标版本支持的执行方式。
+- 提供 `/layout-parsing` 及现有健康接口的兼容适配，保留请求字段、成功与错误结构；不将原始 Pipeline Python 对象直接当作现有 HTTP 响应返回。
+- 所有 replica 共享同一个 vLLM server_url，先采用阶段一选出的固定副本数和每实例子图并发。Serve 不会自动把独立页面合成高效模型批次，本阶段不顺便改变输入粒度或引入自定义跨页 batch。
+- 限制页面在途数与排队长度。超时、取消、actor 重启时保留请求关联，不承诺 exactly-once，也不把重试造成的重复计算当成吞吐收益。
+- 网关仍通过稳定的 PaddleX HTTP 边界调用；Serve 启动、停止、健康检查、持久化配置纳入根 Compose 和 `scripts/docker.sh`，不依赖宿主机临时后台进程。
+- 保留阶段一 Nginx 部署模式作为切换选项；固定副本试验中由 Serve 接管 Pipeline 路由，不无理由叠加两套分发。将 Ray 相关依赖留在推理模块，不引入网关 Python 环境。
+
+### 2.3 验证托管价值，再评估扩缩容
+
+- 在同一硬件、版本、样本、副本数、客户端并发与子图并发下比较阶段一和 Ray Serve，目标是吞吐不明显退化、契约与稳定性不退化，同时获得副本恢复、统一路由和可观测性。
+- 建议吞吐不低于阶段一的 95%，p95 不超过其 1.2 倍；否则先定位路由、序列化、调度和设备分配成本，不宣称迁移成功。
+- 验证单 replica 失败时剩余副本可服务、失败请求被明确返回，以及新 replica 就绪后才接收任务；共享 vLLM 故障则视为后端整体不可用，不能以 replica 健康掩盖。
+- 固定副本通过后再讨论自动扩缩容。后端 DP=4 容量固定，不能只因页面排队而无限增加 Pipeline；用后端饱和状态及资源容量限制最大副本数，验证扩容启动成本。
+- 最终以同一 407 页、最大并发 8 跑完整验证，再决定是否默认切换。Ray Serve 管理收益与吞吐收益分别报告。
+
+## 验证、交付与证据位置
+
+- 修改前后运行最近的协议/容器配置测试，交付前运行 `.harness/scripts/check.ps1`。如执行主机无 PowerShell，说明原因并逐项执行同等 harness lint、Ruff format/check、离线 pytest；不能仅跑文档 lint 就声称实现验证通过。
+- 本地检查通过后按远端工作流部署：远端干净、分支确认、`git pull --ff-only`，验证 Compose，再用 `scripts/docker.sh` 更新整套服务。只在镜像输入变化时构建；Ray 新依赖涉及镜像输入，应构建明确版本的推理镜像。
+- 各阶段都验证网关与 PaddleX 健康端点及真实单页 smoke。真实响应仅写 `output/smoke/`，临时 PDF 放 `tmp/pdfs/`，禁止输出 Base64、完整响应或敏感正文到日志。
+- 原始逐页结果、计时和采样放 `output/smoke/<run-id>/`；可提交的脱敏结论放 `.harness/reports/benchmarks/`，列出分支/SHA、配置、版本、样本 hash、失败与未知项。
+- 已有本地参考证据目录：`output/smoke/book_dp4_c8_20261112/`（中断试跑）、`output/smoke/profile_20261112_181443/`（采样）。它们被 Git 忽略，不保证公司机器存在；本计划正文已保留关键结论，实施时需重新采集基准。
+- 最终更新 README、架构和远端状态的对应权威位置；执行期间在本计划逐项记录命令、结果和决策，完成后归档并移出 active 索引。
+
+## 进度记录
+
+- [x] 2026-11-12：根据对话建立两阶段计划并明确性能门槛；尚未部署。
+- [x] 2026-11-13：明确阶段一使用 Nginx `least_conn` + 两个独立 Pipeline 容器，阶段二改为性能达标且有托管需求时评估；仅更新计划，未部署。
+- [ ] 阶段一：基线稳定、Nginx 与两个 Pipeline 容器、代理边界验证、受控对照、整本验证及决策。
+- [ ] 阶段二（以阶段一通过且确认托管需求为前提）：Ray Serve 固定副本与兼容接口、性能对照、故障验证。
+
+## 意外发现与待验证项
+
+- 实施时实际镜像、编译补丁、负载来源、GPU/NPU 资源占用都可能与历史不同。
+- 多个 Pipeline 是否能充分供给 VLM、最优副本数以及共享设备的干扰程度，均未验证。
+- 不知道当前 VLM 请求长度是否普遍偏短，不能把“小批量”误写成已测实的“短请求”。
+
+## 决策记录
+
+- 当前优先交付 Nginx + 固定少量 Pipeline 容器；先验证并行实例收益，再决定是否需要 Ray Serve，不以引入框架本身为目标。不同时迁移 Serving、升级后端和调整模型。
+- 共享单一 VLM 服务入口及 DP=4；第一阶段不是每个 Pipeline 配一套独立 VLM。
+- 不直接关闭同一 Pipeline 对象的串行保护，不在本计划中迁移官方 Triton/HPS 栈。
+- 2026-11-13 的任务是按阶段执行，阶段二为条件分支，不因日程安排跳过阶段一门槛。
+
+## 恢复与回滚
+
+- 每次发布前保存脱敏的有效参数、镜像 digest、已知可运行提交与部署模式；敏感环境文件只在受控位置备份。
+- 阶段一异常：停止负载客户端继续提交新页，保留失败与已取消请求证据；用原 Compose 模式和原参数恢复单 Pipeline，不强制重置仓库、不影响其他 GPU 上的服务。
+- 阶段二异常：切回阶段一 Nginx 与 Pipeline 容器，恢复兼容入口；通过 Compose 停止 Ray 服务，保留 vLLM 和其他服务的正确生命周期关系。
+- 任一回滚后验证所有目标容器健康、端点连通和单页解析；仍异常则停止发布并报告，禁止循环重启掩盖错误。
+
+## 结果总结
+
+待实施。已确定优先采用 Nginx 多 Pipeline 容器模式；当前仅有可执行计划，没有多容器或 Ray Serve 的性能改善结论。
+
+### 2026-11-13 执行预检
+
+- 独立分支 `codex/t4-pipeline-replicas-benchmark`，起点 T4 `b82488d`，本地隔离 worktree；保留原工作区未提交内容。
+- T4 原分支干净且领先其 origin 四个提交，已在新分支推送保留并执行 `git pull --ff-only`。
+- 原 ContractLens 栈未运行，GPU 6/7 属其他服务；仅使用 Pipeline GPU 1、VLM GPU 2/3/4/5。
+- 固定原环境 DP=4、TP=1、显存 0.6、每 rank 序列上限 16、token 上限 16384；缓存镜像 Torch 2.8.0 / vLLM 0.10.2 / PaddleX 3.6.1。
+- Nginx 官方 1.29.7-alpine，digest `sha256:e7257f1ef28ba17cf7c248cb8ccf6f0c6e0228ab9c315c152f9c203cd34cf6d1`，amd64，62,178,906 字节。动态 DNS 使用 upstream zone + resolve + Docker DNS。
+- CUDA opt-in overlay 保留默认单 Pipeline，Ascend + replicas 显式报错。A 组启动但不向第二个副本发请求，以固定模型内存占用。
+- 本地没有 PowerShell，已逐项运行等价检查：harness lint、Ruff format/check、pytest（49 passed）、Bash syntax、diff check。
