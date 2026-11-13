@@ -1,0 +1,15 @@
+# Two physical GPUs: one Pipeline worker and one vLLM DP rank on each.
+# Applied after compose.yaml and compose.replicas.yaml by scripts/docker.sh.
+services:
+  pipeline-1:
+    environment:
+      CUDA_VISIBLE_DEVICES: ${COLOCATED_GPU_1:?Set COLOCATED_GPU_1}
+  pipeline-2:
+    environment:
+      CUDA_VISIBLE_DEVICES: ${COLOCATED_GPU_2:?Set COLOCATED_GPU_2}
+  paddleocr-vlm-server:
+    environment:
+      CUDA_VISIBLE_DEVICES: ${COLOCATED_GPU_1:?Set COLOCATED_GPU_1},${COLOCATED_GPU_2:?Set COLOCATED_GPU_2}
+      VLM_DATA_PARALLEL_SIZE: "2"
+      VLM_DATA_PARALLEL_BACKEND: mp
+      VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.6}

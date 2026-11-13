@@ -266,3 +266,10 @@ Nginx 使用固定版本及 digest 的官方 Alpine 镜像，按 Docker DNS 动�
 
 需要复测矩阵时，`scripts/run_replicas_benchmark.sh D <label>` 使用四副本、每副本子图并发
 16、客户端并发 8；与双副本 C 比较会同时增加总供给上限（32 → 64），须单独报告。
+
+### 双 GPU 共置部署（2 Pipeline + DP=2）
+
+每卡一个 Pipeline worker 和一个 vLLM rank 的可选 CUDA 方案见
+[运维部署手册](deploy/two-gpu/README.md)。使用独立 `.env.two-gpu` 和
+`bash scripts/docker-two-gpu.sh`，可明确选择宿主两张 GPU；不改变原默认部署及 Ascend 配置。
+T4验证不等于V100现场验收。

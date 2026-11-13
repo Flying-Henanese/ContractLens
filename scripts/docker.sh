@@ -21,7 +21,7 @@ case "${CONTRACTLENS_PLATFORM}" in
         ;;
 esac
 
-# Opt-in CUDA experiment; the Ascend deployment is deliberately excluded.
+# Opt-in CUDA replicas; the Ascend deployment is deliberately excluded.
 if [[ "${CONTRACTLENS_PIPELINE_MODE:-single}" == "replicas" ]]; then
     if [[ "${CONTRACTLENS_PLATFORM}" != "cuda" ]]; then
         echo "Pipeline replicas experiment supports CUDA only." >&2
@@ -35,6 +35,14 @@ if [[ "${CONTRACTLENS_PIPELINE_MODE:-single}" == "replicas" ]]; then
     esac
 else
     COMPOSE_REPLICAS_ARGS=()
+fi
+
+if [[ "${CONTRACTLENS_GPU_LAYOUT:-separate}" == "colocated" ]]; then
+    if [[ "${CONTRACTLENS_PLATFORM}" != cuda || "${CONTRACTLENS_PIPELINE_MODE:-single}" != replicas || "${CONTRACTLENS_PIPELINE_WORKERS:-2}" != 2 ]]; then
+        echo "Colocated GPU layout requires CUDA replicas with two workers." >&2
+        exit 2
+    fi
+    COMPOSE_REPLICAS_ARGS+=(-f "${PROJECT_ROOT}/compose.colocated.yaml")
 fi
 
 readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
