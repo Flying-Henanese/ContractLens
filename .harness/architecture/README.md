@@ -73,3 +73,11 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 | 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py` |
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。
+
+## CUDA 实验部署
+
+`CONTRACTLENS_PIPELINE_MODE=replicas` 为显式选择的 T4 实验模式，根
+`compose.replicas.yaml` 替换内部 `paddleocr-vl-api` 为 Nginx，并增加
+`pipeline-1` / `pipeline-2` 两个独立 Pipeline，访问同一 vLLM 入口。
+网关 HTTP 边界、单页输入和 fail-fast 契约不变。默认单 Pipeline 部署继续使用
+`compose.yaml`；实验不适用于 Ascend。性能验收状态见 active plan。
