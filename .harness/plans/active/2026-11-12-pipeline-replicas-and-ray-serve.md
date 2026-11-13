@@ -179,3 +179,7 @@ api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
 - Nginx 官方 1.29.7-alpine，digest `sha256:e7257f1ef28ba17cf7c248cb8ccf6f0c6e0228ab9c315c152f9c203cd34cf6d1`，amd64，62,178,906 字节。动态 DNS 使用 upstream zone + resolve + Docker DNS。
 - CUDA opt-in overlay 保留默认单 Pipeline，Ascend + replicas 显式报错。A 组启动但不向第二个副本发请求，以固定模型内存占用。
 - 本地没有 PowerShell，已逐项运行等价检查：harness lint、Ruff format/check、pytest（49 passed）、Bash syntax、diff check。
+
+- 用户补充要求：完成双 Pipeline 当前轮次后，继续试验四 Pipeline 共享 GPU 1 + 原 DP=4，
+  检查是否能持续提高后端负载。新增 D=4×16（总子图并发上限 64），明确区别于 C=2×16。
+  不触碰 Ascend；若显存不足、引擎失败或新增超时，停止加压。

@@ -224,3 +224,9 @@ Nginx Alpine；开源动态 DNS 功能见 [Nginx upstream 文档](https://nginx.
 
 回滚：取消实验客户端后，移除 `CONTRACTLENS_PIPELINE_MODE` 并使用原参数运行
 `bash scripts/docker.sh up`，由统一生命周期入口恢复原单 Pipeline 拓扑。
+
+追加四副本实验：`CONTRACTLENS_PIPELINE_MODE=replicas CONTRACTLENS_PIPELINE_WORKERS=4
+bash scripts/docker.sh up` 加载 `compose.replicas4.yaml`，四个独立 Pipeline 共用所选
+Pipeline GPU，Nginx 等待四者健康后启动。`scripts/run_replicas_benchmark.sh D <label>`
+使用四副本、每副本子图并发 16、客户端并发 8；与双副本 C 比较时会同时增加总供给上限
+（32 → 64），须单独报告。该模式仍不适用于 Ascend。

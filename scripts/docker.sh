@@ -28,6 +28,11 @@ if [[ "${CONTRACTLENS_PIPELINE_MODE:-single}" == "replicas" ]]; then
         exit 2
     fi
     COMPOSE_REPLICAS_ARGS=(-f "${PROJECT_ROOT}/compose.replicas.yaml")
+    case "${CONTRACTLENS_PIPELINE_WORKERS:-2}" in
+        2) ;;
+        4) COMPOSE_REPLICAS_ARGS+=(-f "${PROJECT_ROOT}/compose.replicas4.yaml") ;;
+        *) echo "Pipeline workers must be 2 or 4." >&2; exit 2 ;;
+    esac
 else
     COMPOSE_REPLICAS_ARGS=()
 fi

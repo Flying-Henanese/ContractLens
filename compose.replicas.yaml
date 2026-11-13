@@ -37,7 +37,8 @@ services:
     environment:
       # 'down' for the one-worker control; empty for two workers.
       PIPELINE_2_STATE: ${PIPELINE_2_STATE:-}
-      NGINX_ENVSUBST_FILTER: ^PIPELINE_2_STATE$
+      PIPELINE_EXTRA_UPSTREAMS: ""
+      NGINX_ENVSUBST_FILTER: ^PIPELINE_(2_STATE|EXTRA_UPSTREAMS)$
     ports:
       - "${API_PORT:-8880}:8080"
     volumes:
