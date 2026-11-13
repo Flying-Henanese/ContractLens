@@ -12,7 +12,9 @@ services:
         condition: service_healthy
   pipeline-3:
     extends:
+      file: compose.replicas.yaml
       service: pipeline-1
   pipeline-4:
     extends:
+      file: compose.replicas.yaml
       service: pipeline-1
