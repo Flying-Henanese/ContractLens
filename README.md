@@ -203,18 +203,53 @@ uv run pytest
 - 当前采用失败即停止策略，不生成不完整的“成功”结果；断点续跑将在后续版本加入。
 - 跨页表格目前只做候选识别，不合并表格 HTML 或正文。
 
-### CUDA Pipeline 副本实验
+### T4 CUDA：4 个 Pipeline worker + vLLM DP=4
 
-仅在独立验证分支使用 `CONTRACTLENS_PIPELINE_MODE=replicas bash scripts/docker.sh up`，
-要求 Docker Compose >= 2.24.4。该模式增加 Nginx 与两个独立 Pipeline，共享原 vLLM，
-不适用于 Ascend。原单 Pipeline 部署仍是默认。代理使用固定版本及 digest 的官方
-Nginx Alpine；开源动态 DNS 功能见 [Nginx upstream 文档](https://nginx.org/en/docs/http/ngx_http_upstream_module.html)。
+T4 上已验证并正在运行的配置使用 Nginx 接收内部 Pipeline 请求，再将单页请求分发给
+4 个独立 Pipeline worker；4 个 worker 共享一个 vLLM 服务，vLLM 使用 TP=1、DP=4。
+这是一项显式选择的 CUDA 部署配置，要求 Docker Compose >= 2.24.4，不适用于 Ascend。
+它保留单 Pipeline 默认部署，启用时不会改变网关 API、逐页处理或文档 fail-fast 行为。
+性能结论和长尾限制见[基准报告](.harness/reports/benchmarks/2026-11-13-t4-pipeline-replicas.md)。
 
-`PIPELINE_2_STATE=down` 是单 worker 对照；留空启用两个 worker。两组均启动两个模型副本
-以固定显存占用，单 worker 组第二个副本空闲。`PIPELINE_SUBGRAPH_CONCURRENCY=8|16`
-分别控制每个副本的子图并发。Pipeline 的原串行保护保持不变；实验容器关闭自动重启。
-代理只公开原 8880 端口，不记录正文，不重试 POST。客户端端到端预算仍为 120 秒。
-实验客户端最多 8 个在途页面且不重试；此入口尚未定义生产过载拒绝策略。
+T4 的 `.env` 运行参数如下；GPU 编号是宿主机编号：
+
+```dotenv
+PIPELINE_GPU_ID=1
+VLM_GPU_IDS=2,3,4,5
+VLM_DATA_PARALLEL_SIZE=4
+VLM_DATA_PARALLEL_BACKEND=mp
+VLM_GPU_MEMORY_UTILIZATION=0.6
+VLM_MAX_NUM_SEQS=16
+VLM_MAX_NUM_BATCHED_TOKENS=16384
+```
+
+用以下命令选择四 worker 配置并检查健康状态。`PIPELINE_SUBGRAPH_CONCURRENCY=16`
+设置每个 worker 的子图并发；4 个 worker 共用 Pipeline GPU 1。镜像、模型及 vLLM
+参数保持与报告记录一致。
+
+```bash
+CONTRACTLENS_PLATFORM=cuda \
+CONTRACTLENS_PIPELINE_MODE=replicas \
+CONTRACTLENS_PIPELINE_WORKERS=4 \
+PIPELINE_SUBGRAPH_CONCURRENCY=16 \
+bash scripts/docker.sh config
+
+CONTRACTLENS_PLATFORM=cuda \
+CONTRACTLENS_PIPELINE_MODE=replicas \
+CONTRACTLENS_PIPELINE_WORKERS=4 \
+PIPELINE_SUBGRAPH_CONCURRENCY=16 \
+bash scripts/docker.sh up
+CONTRACTLENS_PLATFORM=cuda \
+CONTRACTLENS_PIPELINE_MODE=replicas \
+CONTRACTLENS_PIPELINE_WORKERS=4 \
+bash scripts/docker.sh ps
+```
+
+Nginx 使用固定版本及 digest 的官方 Alpine 镜像，按 Docker DNS 动态解析 worker；代理不记录
+正文，也不自动重发推理 POST。worker 保留 Pipeline 内部串行保护，实验配置关闭自动重启。
+当前实测在整书负载下吞吐比单 worker 高约 81.3%，但 4 worker 出现 6 个超时，其中
+4 页是单 worker 对照中成功的页面，因此当前记录为已验证的运行方案，尚未达到零新增超时的
+推广门槛。该入口也尚未定义面向生产流量的过载拒绝策略。
 
 性能测试：在已具备项目依赖的环境执行
 `python scripts/benchmark_replicas.py --pdf tmp/pdfs/book.pdf --run A-1 --pages 1,2,3,4,5,6,7,8`。
@@ -225,11 +260,9 @@ Nginx Alpine；开源动态 DNS 功能见 [Nginx upstream 文档](https://nginx.
 仅在 vLLM 和 Pipeline 健康检查均通过后继续其他独立页面；仍记录超时，完整测试有失败时
 客户端退出码为 1，未完成时为 2。网关文档级 fail-fast 不变，不生成伪成功的整书结果。
 
-回滚：取消实验客户端后，移除 `CONTRACTLENS_PIPELINE_MODE` 并使用原参数运行
-`bash scripts/docker.sh up`，由统一生命周期入口恢复原单 Pipeline 拓扑。
+回滚：取消实验客户端后，从命令环境中移除 `CONTRACTLENS_PIPELINE_MODE`、
+`CONTRACTLENS_PIPELINE_WORKERS`、`PIPELINE_SUBGRAPH_CONCURRENCY` 和 `PIPELINE_2_STATE`，
+再运行 `bash scripts/docker.sh up`，由统一生命周期入口恢复原单 Pipeline 拓扑。
 
-追加四副本实验：`CONTRACTLENS_PIPELINE_MODE=replicas CONTRACTLENS_PIPELINE_WORKERS=4
-bash scripts/docker.sh up` 加载 `compose.replicas4.yaml`，四个独立 Pipeline 共用所选
-Pipeline GPU，Nginx 等待四者健康后启动。`scripts/run_replicas_benchmark.sh D <label>`
-使用四副本、每副本子图并发 16、客户端并发 8；与双副本 C 比较时会同时增加总供给上限
-（32 → 64），须单独报告。该模式仍不适用于 Ascend。
+需要复测矩阵时，`scripts/run_replicas_benchmark.sh D <label>` 使用四副本、每副本子图并发
+16、客户端并发 8；与双副本 C 比较会同时增加总供给上限（32 → 64），须单独报告。

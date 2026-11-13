@@ -4,7 +4,22 @@
 
 ## 最近观测
 
-观测日期：2026-09-11（只读复核）
+观测日期：2026-11-13（T4 CUDA 四 Pipeline 配置）
+
+远端目录 `/home/mineru_dev/projects/ContractLens` 位于分支
+`codex/t4-pipeline-replicas-benchmark`，提交 `296f5f1`，工作区干净。
+`bash scripts/docker.sh ps` 显示 `api`、Nginx 服务 `paddleocr-vl-api`、共享
+`paddleocr-vlm-server` 和 `pipeline-1` 至 `pipeline-4` 全部 healthy。
+
+该次运行的 `.env` 参数为 Pipeline GPU 1，vLLM GPU 2/3/4/5、TP=1、DP=4、backend=mp、
+显存比例 0.6、每 rank max-num-seqs=16、max-num-batched-tokens=16384；4 个 Pipeline
+容器均使用 GPU 1 和 `PIPELINE_SUBGRAPH_CONCURRENCY=16`。vLLM 使用
+PaddleOCR-VL-1.6-0.9B，Pipeline 与 vLLM 版本为 PaddleX 3.6.1、vLLM 0.10.2。
+
+整书性能记录和验收限制见[基准报告](../reports/benchmarks/2026-11-13-t4-pipeline-replicas.md)。
+这次记录只对应上述分支和观测时间；部署前仍须检查远端分支、工作区、GPU、参数及容器健康。
+
+历史观测日期：2026-09-11（只读复核）
 
 远端工作区位于 `codex/unify-inference-stack`，提交为 `5dfebe4`，工作区干净。执行
 `bash scripts/docker.sh ps` 未列出任何容器；对 `127.0.0.1:8888/openapi.json` 和

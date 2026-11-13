@@ -74,11 +74,16 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。
 
-## CUDA 实验部署
+## CUDA 多 Pipeline 部署
 
-`CONTRACTLENS_PIPELINE_MODE=replicas` 为显式选择的 T4 实验模式，根
-`compose.replicas.yaml` 替换内部 `paddleocr-vl-api` 为 Nginx，并增加
-`pipeline-1` / `pipeline-2` 两个独立 Pipeline；选择四 worker 时追加
-`compose.replicas4.yaml` 中的 `pipeline-3` / `pipeline-4`。各实例访问同一 vLLM 入口。
-网关 HTTP 边界、单页输入和 fail-fast 契约不变。默认单 Pipeline 部署继续使用
-`compose.yaml`；实验不适用于 Ascend。性能验收状态见 active plan。
+T4 当前验证方案由根 Compose 的 CUDA overlay 提供：Nginx 替代内部
+`paddleocr-vl-api` 服务入口，`pipeline-1` 至 `pipeline-4` 启动 4 个独立 Pipeline，
+共享单一 vLLM 服务。T4 实测将 4 个 Pipeline 放在 GPU 1，vLLM 配为 TP=1、DP=4，
+使用 GPU 2/3/4/5。网关仍按单页调用 Pipeline，HTTP 边界、文档 fail-fast 和模块职责
+不变。具体部署命令、参数、吞吐和超时结论见 [README 的 T4 配置说明](../../README.md)
+与[基准报告](../reports/benchmarks/2026-11-13-t4-pipeline-replicas.md)。
+
+这是 CUDA 显式选择的运行模式，不改变默认单 Pipeline Compose，也不适用于 Ascend。
+2026-11-13 的全量对照显示吞吐提升约 81.3%，但 4 worker 新增 4 个超时页；因此记录为
+当前可复用配置，稳定性推广门槛尚未通过。T4 的易变运行状态见
+[`remote-state.md`](../operations/remote-state.md)。

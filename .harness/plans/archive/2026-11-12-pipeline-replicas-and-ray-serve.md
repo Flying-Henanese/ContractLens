@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: Codex
 created: 2026-11-12
 updated: 2026-11-13
@@ -33,7 +33,7 @@ blocked_by: []
 - 本地与远端此前分支、Compose 文件不同；本地 `compose.ascend.yaml` 有用户改动。实施前重新检查，不覆盖无关改动，不直接把本地整个目录复制到远端。
 - 网关协议、归一化、页序、坐标与 fail-fast 契约保持。任一文档页失败不得形成伪成功的整份文档结果；压测可以分别记录单页请求失败。
 - 本计划拟替代的是“仅一个 Pipeline 进程”的部署拓扑，不替代模块边界及统一 Compose 生命周期。阶段一由 Nginx 提供 `paddleocr-vl-api:8080`，实际 PaddleX 服务命名为 `pipeline-1`、`pipeline-2`；后续评估 Ray 时保持该兼容入口。Nginx 作为推理模块内部入口，不承载网关业务逻辑。
-- 与 [整份 PDF 提交计划](2026-07-28-whole-document-submission.md) 的输入粒度目标不同；本实验明确采用逐页请求，不同时实施该计划。与 [统一推理栈计划](2026-09-07-unified-inference-stack.md) 协调，继续使用根 Compose 管理整套服务。
+- 与[整份 PDF 提交计划](../active/2026-07-28-whole-document-submission.md)的输入粒度目标不同；本实验明确采用逐页请求，不同时实施该计划。与[统一推理栈计划](../active/2026-09-07-unified-inference-stack.md)协调，继续使用根 Compose 管理整套服务。
 
 ## 阶段一：Nginx + 两个 Pipeline 容器，共享 vLLM DP=4
 
@@ -143,14 +143,15 @@ api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
 
 - [x] 2026-11-12：根据对话建立两阶段计划并明确性能门槛；尚未部署。
 - [x] 2026-11-13：明确阶段一使用 Nginx `least_conn` + 两个独立 Pipeline 容器，阶段二改为性能达标且有托管需求时评估；仅更新计划，未部署。
-- [ ] 阶段一：基线稳定、Nginx 与两个 Pipeline 容器、代理边界验证、受控对照、整本验证及决策。
-- [ ] 阶段二（以阶段一通过且确认托管需求为前提）：Ray Serve 固定副本与兼容接口、性能对照、故障验证。
+- [x] 阶段一：实现并运行 Nginx + 4 Pipeline worker + 共享 vLLM DP=4；固定集合、整书对照和资源采样已完成，验收未通过“不得新增超时”门槛。
+- [x] 阶段二决策：阶段一未达到门槛，不进入 Ray Serve 实施。
 
-## 意外发现与待验证项
+## 结果中的限制
 
-- 实施时实际镜像、编译补丁、负载来源、GPU/NPU 资源占用都可能与历史不同。
-- 多个 Pipeline 是否能充分供给 VLM、最优副本数以及共享设备的干扰程度，均未验证。
-- 不知道当前 VLM 请求长度是否普遍偏短，不能把“小批量”误写成已测实的“短请求”。
+- T4 的镜像、设备分配和实测资源值是一次有日期的观测；其他机器或后续部署前必须重新核对。
+- 四 Pipeline 提高整书成功页吞吐，但未消除长生成页超时，且出现单 Pipeline 对照中成功的新增超时页。
+- vLLM Waiting 始终为 0；DP 吞吐和 GPU 使用率提高，但没有持续排队或四卡饱和的证据。
+- 网关 CLI/API smoke 与 worker IP 变化故障验证未完成；这些结果不构成代理恢复验收。
 
 ## 决策记录
 
@@ -168,7 +169,17 @@ api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
 
 ## 结果总结
 
-待实施。已确定优先采用 Nginx 多 Pipeline 容器模式；当前仅有可执行计划，没有多容器或 Ray Serve 的性能改善结论。
+阶段一实现与测量已结束，具体事实以[独立基准报告](../../reports/benchmarks/2026-11-13-t4-pipeline-replicas.md)
+为准。T4 当前运行配置为 4 个 Pipeline worker 共用 GPU 1，并连接到 GPU 2/3/4/5 上 TP=1、DP=4
+的单一 vLLM 服务；每个 worker 子图并发 16。固定 16 页集合成功吞吐中位数比单 worker 高约
+89.5%，整书 407 页中 4 worker 成功 401 页、超时 6 页；单 worker 成功 399 页、超时 8 页。
+四 worker 虽将整书时间缩短约 44.6%，仍有四个在单 worker 下成功的页面超时，未达到“不得新增超时”
+门槛。用户决定先沉淀这组当前 T4 配置和结论；该配置保持 CUDA 显式选择，不修改 Ascend，也不
+据此改变默认单 Pipeline 部署。Ray Serve 条件未满足，未实施。
+
+2026-11-13 复核时 T4 分支为 `codex/t4-pipeline-replicas-benchmark`、提交 `296f5f1`、工作区干净；
+API、Nginx、4 个 Pipeline 和 vLLM 容器均 healthy。远端当前运行参数及观测时间记录在
+[`remote-state.md`](../../operations/remote-state.md)。
 
 ### 2026-11-13 执行预检
 
@@ -194,14 +205,14 @@ api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
 - B 三次：0.4476 / 0.4639 / 0.4291 页/秒，P95 21.50 / 20.19 / 22.97 秒，48/48 严格通过。
 - A-pre-1 每 rank 平均 Running 0.27～0.78，Waiting 全为 0；B-1 平均 Running 1.03～1.24，Waiting 仍全为 0；B-1 VLM GPU 平均 31～49%，尚无持续排队饱和证据。
 - 镜像默认 Dynamo `recompile_limit=8`、`accumulated_recompile_limit=256`，PaddleX GenAI 源码未发现相关覆盖；本实验尚未修改编译策略。
-- 后续仍需 A-post、C、用户追加 D、整书对照、代理边界和网关烟测。仅上述样本结果不足以宣告最终验收。
+- 此处记录的是阶段性结果；后续 A-post、C、D 和整书对照已在下文完成，最终结论以结果总结和独立报告为准。
 
 - A-post 三次 0.3201 / 0.3247 / 0.3185 页/秒，P95 27.51 / 26.25 / 26.87 秒，48/48 严格通过，回归基线可重复。
 - C 三次 0.4921 / 0.4829 / 0.5000 页/秒，P95 18.62 / 21.51 / 20.73 秒，48/48 严格通过。
 - 用户追加 D 四 worker 同卡试验三次 0.6030 / 0.6152 / 0.6038 页/秒，P95 17.50 / 19.50 / 21.71 秒，48/48 严格通过；相比 A-pre 吞吐中位数约 +89.5%，相比 C 约 +22.7%。
 - D-1 每 rank 平均 Running 2.14～2.59、峰值 8～11，Waiting 仍为 0；合计约 225.2 generation tokens/s，四卡平均利用率约 41.8%。四 Pipeline 常驻 GPU 1 显存一次采样约 3307 MiB；未修改模型或编译策略，VLM 无重启。
 - 抽查 A-pre-2、A-post-1、B-1、C-1 与 A-pre-1：固定集合尺寸、版面标签、坐标与正文均一致。固定集合不包含表格，因此后续整书验收需覆盖表格页，不能用该集合独立推断表格稳定性。
-- 整书比较运行 ID：`book-A-1` 与 `book-D-1`，每轮前有单独预热。正在运行，尚未得出整书验收结论。
+- 整书比较最终运行 ID 为 `full-A-1` 与 `full-D-1`，每轮前单独预热；中断的 `book-A-1` 仅作为长尾复现证据。
 
 ### 整书 A 组未通过与最小诊断
 
@@ -211,7 +222,7 @@ api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
 - 使用临时独立 uv tool 环境安装 py-spy 0.4.3，未在宿主机运行项目 `uv sync`，未改推理镜像依赖。
 - 单页缩小复现 `isolate-page81`：保持原模型/开关/参数，C=1，110.52 秒成功且严格质量通过；单页本身已接近 120 秒预算。
 - 15 秒、25Hz、含 idle 的诊断采样表明 Pipeline VLM worker 持续在 `_doc_vlm_genai_collect_responses -> Future.result -> wait`；Serving worker 等结果队列。idle 线程样本只用于等待路径判断，不作为 CPU 热点比例。
-- 当前继续以 81～88 页最小范围做 C=8 的 A/D 对照，验证长 VLM 生成导致的串行页队列超时；尚不改变 token 限制、识别开关或业务超时。
+- 随后的 81～88 页最小范围 C=8 A/D 对照验证了长 VLM 生成期间的超时差异；没有改变 token 限制、识别开关或业务超时。
 
 - 最小范围 `isolate-range-A`（81～88，C=8）：4/8 成功、4/8 超时；`isolate-range-D-1`：6/8 成功、2/8 超时，四副本缓解排队但未消除单页长尾。
 - 第 81 页算法块 8640 字符、110 行、唯一行 16，某行重复 48 次；源页总文字 2229 字符，38 个非空行，最多重复 2 次。结构验证通过不代表内容正确。
@@ -221,3 +232,12 @@ api -> paddleocr-vl-api:8080（PaddleX 兼容接口 / Ray Serve）
 - 后续全量运行计划：`full-D-1`（四副本）与 `full-A-1`（单副本），全部请求默认参数，允许健康后端的独立页面超时后继续，完整统计 407 个终态。原中断 `book-A-1` 只保留为故障证据。
 
 - 每个新实验组以 `PIPELINE_EXPERIMENT_ID` 标签触发 Compose 重建 worker、重新预热，避免上一组已超时但仍在处理的页面积压污染后组；不重建或重启 vLLM，不改变模型、识别参数或 Ascend。
+
+### 全量 A/D 对照结果
+
+- `full-D-1`：407 个页面全部尝试，401 成功、6 超时，898.00 秒，成功吞吐 0.44655 页/秒，P50/P95/P99=12.02/48.03/120.00 秒。失败页 81/84/121/124/145/146；每页有唯一终态，无未提交页面。
+- 严格质量通过 390 页；11 个失败页 4/12/70/116/118/156/214/216/298/376/380 都确认为源 PDF 零文字、零图片、零内容流的空白页。401 个成功结果中的 18 个 table 均通过嵌套标签及 rowspan/colspan 正数检查，seal 数为 0。
+- D 全量约 209.6 generation tokens/s，平均 Running 合计 9.81、Waiting 始终 0；GPU 2/3/4/5 平均利用率 73.6%/42.8%/39.2%/37.6%，Pipeline GPU 1 平均 5.6%，峰值显存 3307 MiB。80 逻辑 CPU 的全局 load1 平均 7.85、最高 12.69；其他 GPU 6/7 利用率采样全为 0。所有实验推理容器重启次数为 0。
+- 完成 A 对照后已恢复四 worker。代理合成请求的 16 个无效请求均返回 422 并覆盖四个 upstream，超大请求按预期返回 413；动态换 IP 故障验证未完成，故不记录为通过。
+- 网关 CLI/API smoke 未运行；远端 Compose 健康状态于归档前重新检查，具体观测见 [`remote-state.md`](../../operations/remote-state.md)。
+- 脱敏基准报告已完成，见 `.harness/reports/benchmarks/2026-11-13-t4-pipeline-replicas.md`。
