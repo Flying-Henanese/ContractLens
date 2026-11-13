@@ -2,7 +2,38 @@
 
 本文件记录会过期的远端运行观测，不是客户端配置或永久产品规格。每次依赖这些信息前必须重新运行健康检查并核对实际响应。
 
-## 最近观测
+## A100 最近观测（2026-11-13）
+
+服务器`a100`/192.168.0.194，目录`/home/mineru_dev/github/contractlens`。
+分支`codex/two-gpu-colocated-deployment`，构建及运行验证时代码`8014d7a`；工作区干净。
+A100 80GB PCIe×4，112逻辑CPU、755GiB RAM、驱动550.54.15、Docker Compose2.29.1。
+只使用原空闲GPU2/3：pipeline-1可见2，pipeline-2可见3，VLM可见2,3、TP1/DP2/mp；
+显存比例0.6、max-num-seqs16、max-num-batched-tokens16384，每worker子图并发16。
+`bash scripts/docker-two-gpu.sh ps`及docker inspect确认五服务healthy，OOM=false、restart=0。
+GPU0/1显存保持65449/52424MiB，其运行服务未修改。
+
+使用仓库Dockerfile实际构建`pdf-parser:two-gpu`，image ID
+`sha256:351750316a2196a65d004edf3b28e504b638cac7a295dc495c30c3de1350638f`。
+首次BuildKit软nofile1024导致uv标准库字节码编译EMFILE；共置overlay的构建专属nofile65536修复后构建通过。
+没有改宿主限制、驱动、Dockerfile、Ascend或其他服务。
+推理镜像从T4复制后补齐原registry digest引用，内容ID为Pipeline44e5147cab1d、VLM58736a123d9c，与T4一致。
+一次性内网传输监听已关闭。
+
+宿主`.paddlex/official_models`是指向`/nas_data/models/paddlex`的绝对软链接，容器内不可达。
+首次初始化因此尝试下载，随后主动down终止（143，非崩溃），改为实目录缓存再up。
+当前`.env.two-gpu`的`PADDLEX_CACHE_DIR`为
+`/home/mineru_dev/github/contractlens/tmp/paddlex-cache`，包含4个所需模型。
+**当前运行依赖此目录，不得将其随临时PDF清理。** 原NAS模型文件未修改。
+权重model.safetensors SHA256为85a479d506a11e724e7285d395c551be69f41dbc16b6342d3cacfb189aed71db，
+宿主与容器内均已核对，与T4一致。
+
+健康端点8888/openapi.json、8880/health、8118/v1/models均返回成功。
+最初两行合成PDF返回200但正文为空，严格校验失败；源文件可提取73字符，未隔离确定模型根因，保留失败记录。
+改用上一轮同一书籍第30页的单页PDF，经8888业务API返回200、1页并通过严格契约校验。
+两个DP均有生成token计数，完成后running/waiting为0；未运行整书或性能基准，不宣称A100性能验收。
+原始结果及部署摘要仅在远端`output/smoke/a100-deploy-2026-11-13/`。
+
+## T4 最近观测
 
 观测日期：2026-11-13（双卡共置模拟V100，实际T4）
 

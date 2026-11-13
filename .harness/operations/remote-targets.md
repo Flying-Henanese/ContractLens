@@ -20,3 +20,14 @@
 前仍须只读确认远端分支、工作区、端口和容器状态，不得从这次成功验证推断当前服务仍在运行。
 
 SSH 私钥和 `IdentityFile` 只存在于用户本机的 SSH 配置，不写入仓库。
+
+## A100 服务器
+
+确认日期：2026-11-13。
+
+- SSH别名：`a100`；主机：`192.168.0.194`；用户：`mineru_dev`。
+- 项目目录：`/home/mineru_dev/github/contractlens`（注意大小写与T4不同）。
+- CUDA双卡入口：`bash scripts/docker-two-gpu.sh <config|build|up|ps|logs|restart|down>`。
+- 配置文件：独立`.env.two-gpu`，选择GPU2/3，原Dockerfile构建网关。
+- 端口：FastAPI8888、Pipeline8880、VLM8118；GPU0/1属于其他项目。
+- 实际缓存路径和运行证据见[remote-state.md](remote-state.md)。每次更新仍检查干净工作区并先git pull --ff-only。

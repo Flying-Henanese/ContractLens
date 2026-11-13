@@ -1,10 +1,11 @@
 # ContractLens 双 GPU 共置部署手册
 
 适用：Linux x86_64，Docker Engine、Compose v2.30+（支持 !override）、NVIDIA 驱动和 NVIDIA Container Toolkit。
-目标是两卡 V100；当前实测硬件是两张 T4，不能替代 V100 现场验收。V100 16GB/32GB 均须确认实际空闲显存。
+目标是两卡 V100；已在两张T4验证，并在两张A100 80GB上完成构建、健康及真实单页API烟测；不能替代V100现场验收。V100 16GB/32GB 均须确认实际空闲显存。
 PaddleOCR 官方提示 CC7.x 的 T4/V100 使用 vLLM 可能超时或 OOM：
 https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/PaddleOCR-VL.html
 
+A100启动验证及构建/缓存排障见[远端状态](../../.harness/operations/remote-state.md)。
 当前T4验证：三轮固定样本48/48成功、严格校验通过，中位0.417页/s；
 整书按用户要求提前停止，231条完成记录中223成功、8超时，存在GPU偏载。
 未通过整书无超时验收，未执行业务网关真实解析烟测；V100需现场验收后再上线。
@@ -55,6 +56,11 @@ docker run --rm --gpus all nvidia/cuda:12.2.2-runtime-ubuntu22.04 nvidia-smi
 
 驱动须兼容镜像实际使用的 CUDA 运行时；不能仅用网关 Dockerfile 的 CUDA12.2 推断推理镜像要求。
 首次在线启动会下载模型，需网络、空间和可写缓存；受限网络可复制已经验证的完整 `.paddlex` 缓存，保留目录结构。
+如果缓存中的 `official_models` 是指向NAS的绝对软链接，仅挂载 `.paddlex` 根目录不会自动挂载软链接目标。
+启动前必须确认容器内可读取权重。可在项目外或忽略目录中准备一个实目录缓存根，
+把所需模型复制到其 `official_models/` 子目录，再将 `PADDLEX_CACHE_DIR` 指向这个缓存根；
+不要在容器中反复下载来掩盖挂载错误。A100本次使用项目 `tmp/paddlex-cache` 实目录，
+包含PaddleOCR-VL-1.6、PP-DocLayoutV3、PP-LCNet_x1_0_doc_ori及UVDoc；当前运行依赖该目录，请勿随临时PDF清理。
 环境模板已固定本轮使用的 Pipeline、vLLM 镜像 digest；不要为了“最新”随意更换版本。
 网关镜像名由 `PDF_PARSER_IMAGE` 指定，默认 `pdf-parser:two-gpu`，首次需构建。
 

@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: Codex
 created: 2026-11-13
 updated: 2026-11-13
@@ -42,6 +42,13 @@ A100 80GB×4，0/1被其他项目使用，2/3空闲；驱动550.54.15，Compose2
 - Torch2.8.0+cu128容器在GPU2/3识别2张A100并成功运行张量运算。
 - 原构建失败在uv编译Python3.11.15标准库：EMFILE。
 - 最小BuildKit探针确认软nofile1024、硬524288；普通运行容器为1048576；宿主全局文件表未耗尽。
+- 8014d7a显式构建nofile65536后成功生成pdf-parser:two-gpu（image351750316a21）。
+- 发现host缓存official_models绝对链接到/nas_data/models/paddlex，容器未挂NAS目标；启动进程因此尝试下载。
+- 主动down中断该次初始化（143），复制4个模型至tmp/paddlex-cache实目录；容器内可见且权重SHA256一致，重新up初始化。
+- 5个服务healthy、OOM=false、restart=0，GPU0/1未变。
+- 合成2行PDF API返回200但严格校验空正文失败，文件自身可提取73字符，失败留档。
+- 同一书籍第30页PDF API返回200且严格校验通过；没有追加整书或负载测试。
+- 本地56测试及Harness/Ruff、Compose检查通过。
 
 ## 意外发现
 
@@ -58,4 +65,7 @@ A100 80GB×4，0/1被其他项目使用，2/3空闲；驱动550.54.15，Compose2
 
 ## 结果总结
 
-部署进行中。
+已完成原Dockerfile构建及GPU2/3双卡启动，五服务健康；真实单页PDF经过业务API严格校验通过。
+合成PDF空正文失败保留，未进行性能压测；A100验证不能替代V100现场验收。
+构建nofile修复已推送分支；缓存软链接问题通过独立实目录缓存解决，详见
+[远端状态](../../operations/remote-state.md)。
