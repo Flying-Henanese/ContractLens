@@ -4,6 +4,8 @@ x-pipeline: &pipeline
   user: root
   init: true
   restart: "no"
+  labels:
+    org.contractlens.experiment: ${PIPELINE_EXPERIMENT_ID:-replicas}
   depends_on:
     paddleocr-vlm-server:
       condition: service_healthy
