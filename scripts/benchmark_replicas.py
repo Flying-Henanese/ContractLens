@@ -69,6 +69,7 @@ async def run(args: argparse.Namespace) -> None:
                 "concurrency": args.concurrency,
                 "deadline_s": 120,
                 "retries": 0,
+                "repetition_penalty": args.repetition_penalty,
                 "endpoint": args.endpoint,
                 "max_json_bytes": max(len(p) for p in inputs.values()) + 200,
             },
@@ -144,6 +145,11 @@ async def run(args: argparse.Namespace) -> None:
                                 "visualize": False,
                                 "useLayoutDetection": True,
                                 "layoutThreshold": 0.5,
+                                **(
+                                    {"repetitionPenalty": args.repetition_penalty}
+                                    if args.repetition_penalty is not None
+                                    else {}
+                                ),
                             },
                             headers={"X-Request-ID": record["id"]},
                         )
@@ -229,5 +235,6 @@ if __name__ == "__main__":
     parser.add_argument("--run", required=True)
     parser.add_argument("--pages", default="1,2,3,4,5,6,7,8")
     parser.add_argument("--concurrency", type=int, choices=range(1, 9), default=8)
+    parser.add_argument("--repetition-penalty", type=float, default=None)
     parser.add_argument("--endpoint", default="http://127.0.0.1:8880")
     asyncio.run(run(parser.parse_args()))
