@@ -28,7 +28,7 @@ cp deploy/two-gpu/env.template .env.two-gpu
 ```
 
 编辑 `.env.two-gpu`：例如只有两卡时设 `COLOCATED_GPU_1=0`、`COLOCATED_GPU_2=1`；
-多卡服务器选择宿主机 `nvidia-smi` 显示的两块空闲卡，如 `2` 与 `3`。两个值必须不同。
+多卡服务器选择宿主机 `nvidia-smi` 显示的两块空闲卡，如 `2` 与 `3`。两个值必须为不同的非负整数；入口会拒绝同卡或无效编号。
 不要把容器内局部编号误作宿主编号：worker 容器只使用指定宿主卡，PaddleX 的 `gpu:0` 是可见设备的局部编号。
 vLLM 可见列表按 A,B 顺序，rank0/1 分别使用该列表的第0/1块卡。
 当前 Compose 向推理容器暴露所有 NVIDIA 设备，再由 CUDA_VISIBLE_DEVICES 选择；这是调度配置，不是安全隔离。
@@ -77,9 +77,10 @@ bash scripts/docker-two-gpu.sh ps
 | PIPELINE_SUBGRAPH_CONCURRENCY | 16 | 每worker子图请求并发 |
 | PDF_PARSER_CONCURRENCY | 2 | 网关单文档逐页请求并发；压测独立客户端C8另行指定 |
 | PDF_PARSER_RETRIES | 0 | 不自动重试，避免长尾请求重复占用 |
-| PDF_PARSER_TIMEOUT_SECONDS | 120 | 上游请求超时，Nginx读超时亦为120s |
+| PDF_PARSER_TIMEOUT_SECONDS | 120 | CLI默认单页超时；独立基准总超时120s；Nginx读空闲超时120s |
 | PDF_PARSER_PORT / API_PORT / VLM_PORT | 8888 / 8880 / 8118 | 宿主端口；变更后运维检查URL也须修改 |
 
+网关文档API当前固定总超时300s并覆盖单页超时设置；大PDF宜用CLI，API限时未作更改。
 启动需要等待vLLM模型初始化，健康检查等待窗口默认900s。
 最终应有5个健康服务：api、paddleocr-vl-api（Nginx）、pipeline-1、pipeline-2、paddleocr-vlm-server。
 监听端口默认绑定宿主全部地址；按部署网络规划防火墙，尤其限制8118诊断接口的访问。
