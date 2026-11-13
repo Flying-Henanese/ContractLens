@@ -70,6 +70,7 @@ async def run(args: argparse.Namespace) -> None:
                 "deadline_s": 120,
                 "retries": 0,
                 "repetition_penalty": args.repetition_penalty,
+                "continue_timeout_pages": args.continue_timeout_pages,
                 "endpoint": args.endpoint,
                 "max_json_bytes": max(len(p) for p in inputs.values()) + 200,
             },
@@ -183,10 +184,29 @@ async def run(args: argparse.Namespace) -> None:
                         record["quality_error"] = str(exc)
                 except Exception as exc:
                     record["error_type"] = type(exc).__name__
-                    # Stop issuing new work on the first failure. Existing requests settle.
-                    stopped.set()
-                record["seconds"] = time.perf_counter() - started
-                record["end"] = time.time()
+                    record["seconds"] = time.perf_counter() - started
+                    record["end"] = time.time()
+                    timeout_error = isinstance(exc, (TimeoutError, httpx.TimeoutException)) or (
+                        isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 504
+                    )
+                    continue_pages = args.continue_timeout_pages and timeout_error
+                    if continue_pages:
+                        try:
+                            for endpoint in (
+                                "http://127.0.0.1:8118/health",
+                                args.endpoint + "/health",
+                            ):
+                                health = await client.get(endpoint, timeout=5)
+                                health.raise_for_status()
+                        except Exception:
+                            continue_pages = False
+                        record["backend_healthy_after_timeout"] = continue_pages
+                    # Independent page probes may continue after a healthy-backend timeout.
+                    # Unexpected errors or a failed backend stop all new submissions.
+                    if not continue_pages:
+                        stopped.set()
+                record.setdefault("seconds", time.perf_counter() - started)
+                record.setdefault("end", time.time())
                 records.append(record)
                 with (out / "pages.jsonl").open("a") as log:
                     log.write(json.dumps(record) + "\n")
@@ -226,7 +246,7 @@ async def run(args: argparse.Namespace) -> None:
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps({k: v for k, v in summary.items() if k != "records"}), flush=True)
     if summary["success"] != len(pages):
-        raise SystemExit(1)
+        raise SystemExit(1 if len(completed) == len(pages) else 2)
 
 
 if __name__ == "__main__":
@@ -235,6 +255,7 @@ if __name__ == "__main__":
     parser.add_argument("--run", required=True)
     parser.add_argument("--pages", default="1,2,3,4,5,6,7,8")
     parser.add_argument("--concurrency", type=int, choices=range(1, 9), default=8)
+    parser.add_argument("--continue-timeout-pages", action="store_true")
     parser.add_argument("--repetition-penalty", type=float, default=None)
     parser.add_argument("--endpoint", default="http://127.0.0.1:8880")
     asyncio.run(run(parser.parse_args()))

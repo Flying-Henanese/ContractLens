@@ -220,7 +220,10 @@ Nginx Alpine；开源动态 DNS 功能见 [Nginx upstream 文档](https://nginx.
 `python scripts/benchmark_replicas.py --pdf tmp/pdfs/book.pdf --run A-1 --pages 1,2,3,4,5,6,7,8`。
 使用 `--pages all` 验证整书；每页请求、唯一页号、质量验证、端到端延迟、DP Prometheus
 指标及 GPU 利用率写入 `output/smoke/<run>/`，拆分页写入 `tmp/pdfs/`。
-失败后停止提交新页，未提交页有明确终态；请求成功与严格质量门槛分别统计。
+默认失败后停止提交新页，未提交页有明确终态；请求成功与严格质量门槛分别统计。
+显式使用 `--continue-timeout-pages`（矩阵脚本设置 `BENCHMARK_CONTINUE_TIMEOUTS=1`）时，
+仅在 vLLM 和 Pipeline 健康检查均通过后继续其他独立页面；仍记录超时，完整测试有失败时
+客户端退出码为 1，未完成时为 2。网关文档级 fail-fast 不变，不生成伪成功的整书结果。
 
 回滚：取消实验客户端后，移除 `CONTRACTLENS_PIPELINE_MODE` 并使用原参数运行
 `bash scripts/docker.sh up`，由统一生命周期入口恢复原单 Pipeline 拓扑。

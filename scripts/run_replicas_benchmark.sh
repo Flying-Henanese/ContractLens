@@ -16,11 +16,15 @@ case "${GROUP}" in
     D) export PIPELINE_SUBGRAPH_CONCURRENCY=16 CONTRACTLENS_PIPELINE_WORKERS=4 ;;
     *) echo "group must be A, B, C or D" >&2; exit 2 ;;
 esac
+CLIENT_EXTRA_ARGS=()
+if [[ "${BENCHMARK_CONTINUE_TIMEOUTS:-0}" == 1 ]]; then
+    CLIENT_EXTRA_ARGS+=(--continue-timeout-pages)
+fi
 benchmark() {
     docker run --rm --user "$(id -u):$(id -g)" --gpus all --network host \
         -v "${PWD}:/work" -w /work -e PYTHONPATH=/work/src \
         --entrypoint python "${BENCHMARK_CLIENT_IMAGE:-pdf-parser:validation-b82488d}" \
-        scripts/benchmark_replicas.py --pdf tmp/pdfs/book.pdf --run "$1" --pages "$2" --concurrency "$3"
+        scripts/benchmark_replicas.py --pdf tmp/pdfs/book.pdf --run "$1" --pages "$2" --concurrency "$3" "${CLIENT_EXTRA_ARGS[@]}"
 }
 bash scripts/docker.sh config
 bash scripts/docker.sh up
@@ -38,7 +42,8 @@ if [[ "${GROUP}" == A ]]; then
 fi
 for ((round=1; round<=REPEATS; round++)); do
     run="${LABEL}-${round}"
-    benchmark "${run}" "${PAGES}" 8
+    result=0
+    benchmark "${run}" "${PAGES}" 8 || result=$?
     docker inspect contractlens-paddleocr-vlm-server-1 "${WORKER_CONTAINERS[@]}" --format '{{.Name}} {{.State.Status}} {{.RestartCount}}' \
         > "output/smoke/${run}/container-state.txt"
     docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' \
@@ -46,4 +51,11 @@ for ((round=1; round<=REPEATS; round++)); do
         > "output/smoke/${run}/container-resources.txt"
     docker logs contractlens-paddleocr-vl-api-1 2>/dev/null | \
         grep -F "${run}-" > "output/smoke/${run}/proxy.jsonl"
+    git rev-parse HEAD > "output/smoke/${run}/revision.txt"
+    if (( result != 0 )); then
+        if [[ "${BENCHMARK_CONTINUE_TIMEOUTS:-0}" != 1 || "${result}" != 1 ]]; then
+            exit "${result}"
+        fi
+        echo "${run}: all independent pages attempted; failures retained in summary.json"
+    fi
 done
