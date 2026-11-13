@@ -1,6 +1,14 @@
 # Two physical GPUs: one Pipeline worker and one vLLM DP rank on each.
 # Applied after compose.yaml and compose.replicas.yaml by scripts/docker.sh.
 services:
+  api:
+    build:
+      # BuildKit may inherit a 1024 soft limit; uv bytecode compilation on
+      # high-core-count hosts can exhaust it. Scope this to the build only.
+      ulimits:
+        nofile:
+          soft: 65536
+          hard: 65536
   pipeline-1:
     environment:
       CUDA_VISIBLE_DEVICES: ${COLOCATED_GPU_1:?Set COLOCATED_GPU_1}

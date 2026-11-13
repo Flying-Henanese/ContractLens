@@ -67,6 +67,8 @@ bash scripts/docker-two-gpu.sh ps
 
 全程使用 `docker-two-gpu.sh` 入口，它固定加载基础、replicas、colocated 三份 Compose。
 不要直接运行不带 overlay 的 `docker compose up`，也不要把本方案配置粘贴到 Ascend 环境。
+双卡overlay为构建步骤显式设置nofile=65536，避免高CPU核心数主机上uv字节码编译触发
+`No file descriptors available`。该限制只作用于镜像构建，不修改宿主机或其他服务。
 不在宿主机运行 uv sync；Python 依赖在网关镜像构建时按 uv.lock 安装。
 新服务器首次构建会访问基础镜像仓库及 Python 包源。
 
