@@ -1,0 +1,20 @@
+# Layer after compose.ascend.yaml and compose.replicas.ascend.yaml.
+services:
+  paddleocr-vl-api:
+    environment:
+      PIPELINE_EXTRA_UPSTREAMS: >-
+        server pipeline-3:8080 resolve max_fails=1 fail_timeout=10s;
+        server pipeline-4:8080 resolve max_fails=1 fail_timeout=10s;
+    depends_on:
+      pipeline-3:
+        condition: service_healthy
+      pipeline-4:
+        condition: service_healthy
+  pipeline-3:
+    extends:
+      file: compose.replicas.ascend.yaml
+      service: pipeline-1
+  pipeline-4:
+    extends:
+      file: compose.replicas.ascend.yaml
+      service: pipeline-1

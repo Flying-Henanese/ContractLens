@@ -67,3 +67,44 @@ healthcheck 本身请求容器内 `/v1/models`。根 Ascend Compose 不发布 `8
 推理配置事实源。
 
 本目录的 `compose.ascend.yaml` 仅保留为导入前的推理模块参考，不能替代上述根目录流程。
+
+## 多 Pipeline 静态适配
+
+此功能尚未在昇腾主机验证。需要 Docker Compose >= 2.24.4（支持 `!override`）。
+Nginx 模板需要 Nginx >= 1.27.3；默认 `nginx:1.29.7-alpine`，直接由 Compose 拉取，
+没有自定义 Dockerfile。ARM/x86 主机应核对所选标签或 digest 的 CPU 架构。
+可通过 `PIPELINE_PROXY_IMAGE` 固定目标架构或多架构索引 digest。
+
+复制根 `.env.ascend.template` 到 `.env.ascend`，设置：
+
+```dotenv
+CONTRACTLENS_PIPELINE_MODE=replicas
+CONTRACTLENS_PIPELINE_WORKERS=2
+PIPELINE_SUBGRAPH_CONCURRENCY=16
+```
+
+模式和副本数由 Shell 脚本选择，需同时导出给脚本（只写入 env 文件不足以选择 overlay）：
+
+```bash
+export CONTRACTLENS_PLATFORM=ascend
+export CONTRACTLENS_PIPELINE_MODE=replicas
+export CONTRACTLENS_PIPELINE_WORKERS=2  # 或 4
+bash scripts/docker.sh config
+bash scripts/docker.sh up
+bash scripts/docker.sh ps
+```
+
+默认多个 Pipeline 共享 NPU 7，VLM 保持 NPU 4/5/6、DP=3。
+副本没有独立宿主机端口。`PIPELINE_NPU_ID` 同时控制 worker 的设备挂载和可见设备；
+设备必须存在且不能与 VLM 重叠。基础 Compose 的 VLM 设备挂载仍需与实际设备配置核对。
+所有 worker 继承当前 Ascend 驱动、缓存与设备管理挂载，网关仍连接原服务名。
+Nginx 不挂载 NPU，不自动重发 POST，读取超时为 120 秒。
+
+同事验收：先核对镜像、驱动、设备、端口和共享 NPU 内存容量；启动后确认全部容器健康，
+检查网关 `/openapi.json`、代理 `/health`、容器内 VLM `/v1/models`，再执行真实 PDF
+烟测和并发测试，核对结果质量、超时、NPU 内存与重启次数。静态检查不代表这些项目通过。
+真实结果仅写入 `output/smoke/`。网关重试仍由原有 `PDF_PARSER_RETRIES` 控制。
+
+恢复单 Pipeline：将 env 文件中的模式设为 `single`，并导出
+`CONTRACTLENS_PIPELINE_MODE=single`，运行 `bash scripts/docker.sh up`。
+统一入口会恢复原 Pipeline 服务并移除副本，无需手动启动或停止独立容器。

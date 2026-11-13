@@ -202,3 +202,9 @@ uv run pytest
 - 公式、图表识别依赖服务端启用相应模型。
 - 当前采用失败即停止策略，不生成不完整的“成功”结果；断点续跑将在后续版本加入。
 - 跨页表格目前只做候选识别，不合并表格 HTML 或正文。
+
+### Ascend 多 Pipeline（仅静态验证）
+
+可选拓扑为 `api → Nginx → 2/4 个 Pipeline → Ascend vLLM`。
+沿用原有 PaddleOCR 昇腾镜像和 VLM 参数，不需要修改或重建 Dockerfile。
+部署和硬件验收步骤见 [Ascend 指南](paddleocr-server/ASCEND.md#多-pipeline-静态适配)。

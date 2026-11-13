@@ -21,6 +21,25 @@ case "${CONTRACTLENS_PLATFORM}" in
         ;;
 esac
 
+# Ascend replicas are opt-in; preserve the default single-Pipeline topology.
+COMPOSE_REPLICAS_ARGS=()
+case "${CONTRACTLENS_PIPELINE_MODE:-single}" in
+    single) ;;
+    replicas)
+        if [[ "${CONTRACTLENS_PLATFORM}" != ascend ]]; then
+            echo "This checkout supports replicas on Ascend only." >&2
+            exit 2
+        fi
+        COMPOSE_REPLICAS_ARGS=(-f "${PROJECT_ROOT}/compose.replicas.ascend.yaml")
+        case "${CONTRACTLENS_PIPELINE_WORKERS:-2}" in
+            2) ;;
+            4) COMPOSE_REPLICAS_ARGS+=(-f "${PROJECT_ROOT}/compose.replicas4.ascend.yaml") ;;
+            *) echo "Pipeline workers must be 2 or 4." >&2; exit 2 ;;
+        esac
+        ;;
+    *) echo "Pipeline mode must be single or replicas." >&2; exit 2 ;;
+esac
+
 readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
 COMPOSE_ENV_ARGS=()
 if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
@@ -28,7 +47,7 @@ if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
 fi
 
 compose() {
-    docker compose "${COMPOSE_ENV_ARGS[@]}" -f "${COMPOSE_FILE}" "$@"
+    docker compose ${COMPOSE_ENV_ARGS[@]+"${COMPOSE_ENV_ARGS[@]}"} -f "${COMPOSE_FILE}" ${COMPOSE_REPLICAS_ARGS[@]+"${COMPOSE_REPLICAS_ARGS[@]}"} "$@"
 }
 
 if ! command -v docker >/dev/null 2>&1; then

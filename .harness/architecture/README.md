@@ -73,3 +73,8 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 | 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py` |
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。
+
+Ascend 可通过 `CONTRACTLENS_PIPELINE_MODE=replicas` 选择独立 overlay：
+`api → paddleocr-vl-api（Nginx）→ pipeline-1/2[/3/4] → paddleocr-vlm-server`。
+默认单 Pipeline 拓扑不变；代理仅分发 Pipeline 请求，网关协议与 VLM 地址保持不变。
+此 Ascend 扩展仅完成静态验证，运行容量须在 NPU 主机验收。
