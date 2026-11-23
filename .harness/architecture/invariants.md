@@ -12,15 +12,16 @@
 3. 统一 Compose 中，网关只能通过 `http://paddleocr-vl-api:8080` 调用 PaddleX Pipeline，不得
    直接调用 vLLM、宿主机端口或历史远端 IP。独立运行网关时才通过 `PDF_PARSER_ENDPOINT` 明确指定
    可访问的 PaddleX 地址。
-4. 推理入口脚本、Pipeline 配置、模型参数和 CUDA/Ascend 设备拓扑保留在
-   `paddleocr-server/`；推理服务以只读目录挂载读取它们，网关模块不得复制或改变这些配置。
+4. 根 Compose 和 overlay 负责设备映射及推理容器编排。Pipeline 和 vLLM 从只读挂载的
+   `paddleocr-server/` 读取其入口和配置，网关模块不得复制或改变这些配置。
 
 ## 输入、编排与失败
 
-1. PDF 输入必须在本地校验；加密、空或损坏 PDF 抛出 `InvalidPdfError`。当前
-   `service.py::_count_pages()` 和 `ingestion/pdf.py::iter_pdf_pages()` 都会读取并校验文件。
-2. 图像文档只接受 BMP、JPEG、PNG、TIFF 和 WEBP；API 同时校验扩展名、Content-Type 和
-   二进制签名，`service.py::parse_image()` 会再次读取并校验签名，失败抛出 `InvalidImageError`。
+1. PDF 输入在本地校验。无法以空密码解密、无页面或读取时报错时抛出 `InvalidPdfError`。
+   `service.py::_count_pages()` 和 `ingestion/pdf.py::iter_pdf_pages()` 均读取并校验文件。
+2. 图像文档只接受 BMP、JPEG、PNG、TIFF 和 WEBP。API 要求扩展名匹配 Content-Type，
+   并独立检查二进制签名是否属于支持的格式；当前签名识别结果不与扩展名交叉比对。
+   `service.py::parse_image()` 再次读取并校验签名，失败抛出 `InvalidImageError`。
 3. 页码从 1 开始，最终输出按 `page_num` 排序且页码唯一；图像固定归一化为第 1 页。
 4. 每个单页 PDF 或图像远端请求必须恰好返回一个 `layoutParsingResults` 条目；服务为每个本地页生成一个
    归一化页面，因此最终页数与本地页数一致。
@@ -31,19 +32,22 @@
 1. PDF 请求显式包含 `fileType=0`；图像请求显式包含 `fileType=1`。两者都包含
    `visualize=false`、`useLayoutDetection`（默认 `true`）和可配置的 `layoutThreshold`。
 2. 成功响应必须满足 HTTP 200、`errorCode == 0` 和预期的 `layoutParsingResults` 形状。
+   当前客户端检查顶层 JSON 对象和返回页数；嵌套数据类型由后续处理消费，缺少完整的协议校验。
 3. 传输错误和超时可以重试；明确业务错误不盲目重试。
-4. 错误包含可定位的图像、文档或页码上下文，但不包含 Base64、完整响应或敏感正文。
+4. 错误应包含可定位的图像、文档或页码上下文，并遵循根 AGENTS.md 的脱敏要求。
+   当前客户端透传上游业务错误的 `errorMsg`，未对该字段单独脱敏。
 5. 远端启用能力和模型阈值属于运行观测，不得硬编码成客户端永久事实。
 
 ## 归一化与坐标
 
 1. 存在版面块时，每个非印章块先使用 `block_content`/`text`，为空且 bbox 有效时使用中心点
-   落在块内的整体 OCR；不会再把块外的整体 OCR 追加为正文。只有完全没有版面详情时，才按
-   整体 OCR 生成详情；组装后的正文仍为空时回退 Markdown 文本。
-2. 有 `seal_res_list` 时，每个有效识别结果生成一个 `SealDetail`；没有 `seal_res_list` 时，
-   每个版面印章检测框生成一个 `SealDetail`、ID 和引用，`texts=[]`。当前不合并或去重重复的
-   识别结果/检测框，条目数不等同于人工确认的物理印章数。
-3. `rec_texts[i]` 与同下标的 `rec_scores[i]`、`rec_polys[i]` 配对；仅在缺少 `rec_polys` 时回退 `rec_boxes`，不使用 `dt_polys` 配对识别文本。
+   落在块内的整体 OCR；块外 OCR 不追加到正文。没有非印章版面详情时，整体 OCR 生成
+   文本详情，包括仅有印章版面块的页面。完成印章处理后的正文仍为空时回退 Markdown 文本。
+2. 有印章识别结果时，每个有效结果生成一个 `SealDetail`。缺少识别结果时，优先使用
+   `layout_det_res` 中的印章检测框，无有效检测框时回退到 `parsing_res_list` 的
+   印章块。每个区域生成一个 `SealDetail`、ID 和引用，`texts=[]`。重复结果或区域会保留。
+3. 印章 `rec_texts[i]` 与同下标的 `rec_scores[i]`、`rec_polys[i]` 配对。同下标的
+   polygon 缺失或无效时回退到 `rec_boxes[i]`。`dt_polys` 不参与配对。
 4. 印章局部 polygon 只有取得可靠 `crop_bbox` 后才能逐点平移到页面坐标：`page_x = local_x + crop_bbox.x0`，`page_y = local_y + crop_bbox.y0`。
 5. 每枚印章独立按服务端显式 `crop_bbox`、Markdown 图片键、版面检测印章框的顺序选择裁剪框；后两种来源只有在区域数量与识别结果数量一致时才能按原始下标绑定。
 6. 多印章先按原始顺序绑定结果与区域；拥有显式裁剪框的条目独立保留该框，其余条目只有在

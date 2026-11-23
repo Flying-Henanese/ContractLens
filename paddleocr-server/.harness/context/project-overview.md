@@ -3,9 +3,10 @@
 ## Current role
 
 `paddleocr-server/` is the inference module imported into the ContractLens
-monorepo. It supplies one PaddleOCR Pipeline and one vLLM service with multiple
-data-parallel model ranks. The root repository owns the business API, public output
-contract, deployment lifecycle, and production documentation.
+monorepo. It supplies PaddleOCR Pipeline configuration and one vLLM service with
+multiple data-parallel model ranks. The root repository owns the business API,
+public output contract, deployment lifecycle, and
+[production topology](../../../.harness/architecture/README.md#compose-拓扑).
 
 The current product architecture is:
 

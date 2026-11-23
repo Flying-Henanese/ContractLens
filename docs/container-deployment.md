@@ -69,10 +69,10 @@ PIPELINE_NPU_ID=7
 VLM_NPU_IDS=4,5,6
 ```
 
-`compose.yaml` is the CUDA topology. `compose.ascend.yaml` keeps the imported
-inference module's verified NPU driver mounts, `privileged` setting, and device
-environment variables. Do not run the CUDA file on Ascend or the Ascend file on a
-CUDA host.
+`compose.yaml` is the CUDA topology. For Ascend, see the hardware prerequisites,
+device mounts, privilege settings, and optional two- or four-worker topology in the
+[Ascend guide](../paddleocr-server/ASCEND.md). The Ascend configuration has static
+validation evidence. Runtime acceptance requires an Ascend host.
 
 ## Host prerequisites
 
@@ -92,7 +92,7 @@ Both Compose files bind-mount `./src` read-only at `/app/src`, set
 `PYTHONPATH=/app/src`, and start Uvicorn with reload restricted to that directory.
 Python source changes are therefore detected without rebuilding the gateway image.
 
-Both inference services also bind-mount `./paddleocr-server` read-only at
+Pipeline and vLLM containers also bind-mount `./paddleocr-server` read-only at
 `/opt/paddleocr-server`. The vLLM entrypoint and PaddleX Pipeline configuration are
 read from that directory, so the imported module remains the owner of inference
 startup and device settings. After changing a mounted inference entrypoint or
@@ -139,8 +139,7 @@ CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
 
 ## T4 rollout
 
-The T4 server uses the CUDA selection unless the deployment owner explicitly selects
-Ascend. Deployment must still follow the repository remote workflow: inspect the
+The T4 server uses the CUDA selection. Follow the repository remote workflow: inspect the
 remote branch and worktree, pull with `--ff-only`, validate Compose, build only when
 the gateway image inputs changed, update the three-process stack together, inspect all
 health checks and logs, and run a real parse smoke test. Dependency synchronization

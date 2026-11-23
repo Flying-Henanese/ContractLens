@@ -10,11 +10,11 @@ Compose 同时编排本项目的 FastAPI 网关、PaddleX Pipeline 和 PaddleOCR
 
 ## 已实现
 
-- 将 PDF 逐页拆分后调用 PaddleX，避免服务默认最多处理 10 页造成文档截断。
+- 将 PDF 逐页拆分后调用 PaddleX，按本地页码组装文档结果。
 - 支持请求超时、网络失败重试和受控并发。
 - 将 PaddleX `prunedResult` 转换为与现有样例相近的 JSON。
 - 输出正文、版面类型、边界框、阅读顺序、OCR/印章文本和处理耗时。
-- 保留表格 HTML，并将每枚物理印章结构化为可定位的独立元素。
+- 保留表格 HTML，按印章识别结果或检测区域生成结构化元素。
 - 提供独立的 JSON 后处理模块，用于识别可能延续到下一页的表格。
 
 ## 安装
@@ -171,11 +171,14 @@ CLI 参数优先于环境变量。默认不继承系统代理，避免内网 Pad
 }
 ```
 
-`layout_fallback_text` ?? PaddleX `parsing_res_list[].block_content` ???? HTML ??????????????????? OCR ???????????????? `markdown.images` ? Base64 ?????
+`layout_fallback_text` 保留 PaddleX 版面块的 `block_content` 或 `text`，包括表格 HTML。
+普通块原文为空时，`text` 可用框内 OCR 补充。`markdown.images` 的印章图片键可用于定位，
+网关输出不携带该字段中的 Base64 图片。
 
 `image_width`、`image_height` 和 `layout_bbox` 统一使用 PaddleX 渲染后的页面像素坐标系。印章 OCR 的 `rec_polys` 原本是裁剪图局部坐标；客户端优先读取 `seal_res_list[].crop_bbox`，当前服务没有该字段时从 `markdown.images` 的印章裁剪图键取得实际整数裁剪框，最后才回退到 `layout_det_res`。转换后的整页 polygon 存入 `texts[].position`，外接矩形存入 `texts[].layout_bbox`。
 
-每枚物理印章生成一个 `Seal` 元素；同一印章识别出的多段文字放在 `texts[]` 中。正文中的 `[印章N]` 通过 `content_references[].target_id` 对应到 `seal_id`。
+每个有效的印章识别结果生成一个 `Seal` 元素，多段文字放在 `texts[]` 中。缺少识别结果时，
+按检测区域生成元素。`[印章N]` 通过 `content_references[].target_id` 关联 `seal_id`。
 
 ## 跨页表格识别
 
@@ -206,5 +209,5 @@ uv run pytest
 ### Ascend 多 Pipeline（仅静态验证）
 
 可选拓扑为 `api → Nginx → 2/4 个 Pipeline → Ascend vLLM`。
-沿用原有 PaddleOCR 昇腾镜像和 VLM 参数，不需要修改或重建 Dockerfile。
+仅切换 Pipeline 拓扑时，可继续使用已有的网关和推理镜像。
 部署和硬件验收步骤见 [Ascend 指南](paddleocr-server/ASCEND.md#多-pipeline-静态适配)。

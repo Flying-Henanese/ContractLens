@@ -2,7 +2,7 @@
 
 远端能力会随服务重启、YAML 和模型变化。涉及服务参数、协议或真实归一化时：
 
-1. 运行 `uv run pdf-parser health`，不要仅依据历史文档。
+1. 将 `PDF_PARSER_ENDPOINT` 设置为本次验证的 PaddleX 地址，运行 `uv run pdf-parser health`。
 2. 必要时读取 `/openapi.json`，从去除 Base64 的响应摘要核对 `model_settings` 和印章参数。
 3. 使用 `.harness/scripts/smoke.ps1`，输出只能写入 `output/smoke/`。
 4. 区分冷启动和预热结果，不把单次性能数据硬编码为客户端事实。

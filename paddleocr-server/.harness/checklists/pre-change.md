@@ -18,8 +18,8 @@
 - 确认 Pipeline 与 VLM 不会使用同一物理设备。`start_vl.sh` 会检查 CUDA
   重叠；CUDA/昇腾 Compose 当前不会检查两组设备是否重叠。
 - 确认改动属于客户端请求压力、单次 Pipeline 内部队列、子图请求并发、实例内
-  批处理或模型实例扩展中的哪一层。当前普通 `paddlex --serve` 服务契约一次
-  处理一个 HTTP 请求。
+  批处理、Pipeline 副本数或模型实例扩展中的哪一层。普通 `paddlex --serve`
+  的请求串行行为以目标镜像为准。
 - 使用 `layout_prep_cpu_workers` 前确认目标镜像中的 PaddleX 版本确实读取该
   字段；不能只根据 YAML 中存在字段就认定线程池已启用。
 - 避免无关重构、依赖升级、镜像升级和批量格式化。

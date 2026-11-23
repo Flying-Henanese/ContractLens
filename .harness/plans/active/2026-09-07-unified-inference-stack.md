@@ -2,7 +2,7 @@
 status: active
 owner: Codex
 created: 2026-09-07
-updated: 2026-09-11
+updated: 2026-11-21
 scope:
   - repository-layout
   - gateway-module
@@ -36,7 +36,7 @@ deployable runtime processes:
 This gives callers one supported endpoint and allows the inference
 implementation to change without spreading its details into business callers.
 
-## Current facts and constraints
+## Baseline at plan creation (2026-09-07)
 
 - The current `ContractLens` package is a gateway/adapter.  It validates input,
   currently splits PDFs into pages, calls `POST /layout-parsing`, and normalizes
@@ -84,6 +84,14 @@ variables, extract a protocol-contract module, change PDF submission granularity
 pin images, or restrict raw inference ports. The imported provider's existing
 host ports remain available pending target-server verification. Those deferred
 items are the later stages of this plan, not completed architecture facts.
+
+As of 2026-11-21, the current deployment and gateway behavior are recorded in
+the [architecture](../../architecture/README.md). The current branch also has
+an opt-in Ascend Nginx overlay with two or four Pipeline workers. The
+[Ascend implementation record](../archive/2026-11-13-ascend-pipeline-replicas.md)
+covers static verification. Use `PDF_PARSER_ENDPOINT` to select a standalone
+provider. The gateway still has the historical fallback URL unless that setting
+is supplied, whereas root Compose sets the internal service DNS.
 
 ## Target architecture
 

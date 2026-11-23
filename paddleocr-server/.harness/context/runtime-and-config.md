@@ -28,10 +28,11 @@ inference-only references and are not a deployment entry point.
 
 1. The root `.env.template` or `.env.ascend.template` supplies deployment
    parameters.
-2. Root Compose starts the gateway, Pipeline, and VLM in one lifecycle. The
-   gateway calls PaddleX through `http://paddleocr-vl-api:8080`.
-3. Both inference services read this directory through the read-only mount at
-   `/opt/paddleocr-server`.
+2. Root Compose manages the gateway, Pipeline, and VLM in one lifecycle. The
+   gateway calls `http://paddleocr-vl-api:8080`; this service runs Nginx when
+   Ascend replica mode is selected.
+3. Pipeline and vLLM containers read this directory through the read-only mount
+   at `/opt/paddleocr-server`.
 4. The VLM entrypoint validates its visible-device count and generates a
    temporary configuration from `vllm_config.yaml`.
 5. `PaddleOCR-VL-1.6.yaml` configures Pipeline behavior and reaches vLLM at

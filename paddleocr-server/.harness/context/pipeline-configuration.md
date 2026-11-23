@@ -96,6 +96,8 @@ genai_config:
 - Compose 使用服务名访问；`start_vl.sh` 在运行时将地址替换为
   `http://127.0.0.1:8118/v1`。
 - `max_concurrency: 16` 控制 Pipeline 同时提交的版面块请求数。
+- Ascend 副本入口用环境变量 `PIPELINE_SUBGRAPH_CONCURRENCY`（默认为 16）生成临时配置，
+  该值按 worker 生效。
 - `batch_size: 4096` 是模块批处理配置，不应直接解释为 4096 个并发 HTTP
   请求。
 

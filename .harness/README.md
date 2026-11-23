@@ -47,3 +47,4 @@ uv run python .harness\scripts\harness_lint.py
 ```
 
 离线测试不得访问真实 PaddleX。真实烟测生成物只允许写入 `output/smoke/`。
+没有 PowerShell 的开发机可按 [变更流程](workflows/change.md#验证和交付)运行同等检查。

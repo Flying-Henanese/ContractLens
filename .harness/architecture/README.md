@@ -2,15 +2,14 @@
 
 ## 系统边界与当前数据流
 
-当前仓库是一个单仓库、单次 Compose 发布的文档解析产品，而不是 `main` 分支时两个独立部署的
-服务：根目录 `src/pdf_parser/` 是业务网关，`paddleocr-server/` 是随仓库交付但保持独立职责的
-推理配置模块。它们不共享 Python 环境、模型实现或硬件配置，却由根目录 Compose 作为同一套运行时
-进程启动和停止。
+根目录 `src/pdf_parser/` 是业务网关，`paddleocr-server/` 是独立维护推理运行时的配置模块。
+两者各有 Python 依赖和运行职责，由根目录 Compose 作为一套服务管理。
 
-网关代码不承载模型推理：文档 API 当前接受 PDF 或受支持图像；CLI 仍只接受 PDF。根目录
-Compose 同时启动网关、`paddleocr-server/` 中的 PaddleX Pipeline 和其 vLLM 进程，网关通过
-Compose 服务 DNS `http://paddleocr-vl-api:8080` 请求 Pipeline。PDF 仍采用逐页远端请求，整份
-PDF 提交是 active plan 中尚未落地的目标状态。
+`POST /api/v1/documents/parse` 同步解析 PDF 或受支持的图像，解析等待上限为 300 秒；
+`POST /api/v1/receipts/recognize` 是预留路由，接受支持的上传类型后返回 HTTP 501。
+CLI 的 `parse` 命令处理 PDF。网关在 Compose 网络内通过
+`http://paddleocr-vl-api:8080` 请求 PaddleX。PDF 采用逐页请求，整份提交见
+[实施计划](../plans/active/2026-07-28-whole-document-submission.md)。
 
 ```text
 外部调用方
@@ -19,13 +18,13 @@ PDF 提交是 active plan 中尚未落地的目标状态。
             -> paddleocr-vlm-server（PaddleOCR-VL / vLLM）
 ```
 
-`API_PORT` 和 CUDA 的 `VLM_PORT` 目前仍保留宿主机诊断映射，但它们不是业务调用契约；网关
-不得直接调用 vLLM。推理容器将整个 `./paddleocr-server` 只读挂载到
-`/opt/paddleocr-server`，因此入口脚本与 Pipeline 配置始终来自导入模块，而不是网关镜像。
+`API_PORT` 和 CUDA 的 `VLM_PORT` 用于宿主机诊断。Pipeline 和 vLLM 容器将
+`./paddleocr-server` 只读挂载到 `/opt/paddleocr-server`。副本模式的 Nginx 容器
+单独挂载代理配置模板。
 
 ```text
 本地 PDF
-  -> service.py::_count_pages：读取 PDF，校验加密/空/损坏并取得总页数
+  -> service.py::_count_pages：读取 PDF，校验输入并取得总页数
   -> ingestion/pdf.py：再次读取和校验，再拆成带 1-based 页码的单页 PDF
   -> service.py：按 Settings.concurrency 有界分批
   -> clients/paddlex.py：每页 POST /layout-parsing，要求恰好返回一页
@@ -45,10 +44,16 @@ PDF 提交是 active plan 中尚未落地的目标状态。
 
 跨页表格候选检测是对已生成结果 JSON 的独立只读分析，不在上述主解析链路中。
 
-部署链路为 `api -> paddleocr-vl-api -> paddleocr-vlm-server`：`api` 等待 Pipeline 健康，
-Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `compose.ascend.yaml`（Ascend）
-和 `scripts/docker.sh` 一起启动、重启和停止。推理配置保持在 `paddleocr-server/`，而不是复制到
-网关 Python 模块中。
+## Compose 拓扑
+
+- CUDA 和 Ascend 默认均为单 Pipeline。网关等待 `paddleocr-vl-api` 健康，Pipeline 等待
+  vLLM 健康。根 Compose 分别使用 `compose.yaml` 和 `compose.ascend.yaml`。
+- Ascend 可在调用 `scripts/docker.sh` 时设置环境变量 `CONTRACTLENS_PIPELINE_MODE=replicas`，
+  通过 `CONTRACTLENS_PIPELINE_WORKERS=2` 或 `4` 选择副本数。Overlay 将
+  `paddleocr-vl-api` 替换为 Nginx，Nginx 等待所有 Pipeline worker 健康，再为请求做
+  `least_conn` 分发。各 worker 共享 Pipeline NPU 与一个 vLLM 服务。网关使用原服务名和协议。
+- 当前分支的 Ascend 拓扑已完成静态解析，目标 NPU 上的启动、并发容量和真实解析见
+  [Ascend 验收步骤](../../paddleocr-server/ASCEND.md#多-pipeline-静态适配)。
 
 正文回退、普通元素/印章坐标和印章去重能力等稳定行为只在 [`invariants.md`](invariants.md)
 定义，本页不复制规则细节。
@@ -57,7 +62,7 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 
 | 关注点 | 权威模块 | 对应离线测试 |
 | --- | --- | --- |
-| FastAPI 的 PDF/图像上传、同步路由、超时和 HTTP 错误 | `src/pdf_parser/api.py` | `tests/test_api.py`、`tests/test_api_timeout.py` |
+| FastAPI 的 PDF/图像上传、同步解析、票据占位路由和 HTTP 错误 | `src/pdf_parser/api.py` | `tests/test_api.py`、`tests/test_api_timeout.py`、`tests/test_image_input.py` |
 | CLI 参数、输出路径、终端消息 | `src/pdf_parser/cli.py` | `tests/test_cli.py` |
 | 环境变量、地址、超时、重试、并发和代理 | `src/pdf_parser/config.py` | 配置或客户端测试 |
 | `/health`、PDF/图像请求体、重试和响应协议 | `src/pdf_parser/clients/paddlex.py` | `tests/test_client.py`、`tests/test_image_input.py` |
@@ -70,11 +75,6 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 | 最终 JSON 类型和字段 | `src/pdf_parser/models.py` | 归一化、服务和 harness 验证测试 |
 | 用户可见领域异常 | `src/pdf_parser/errors.py` | 最接近异常来源的测试 |
 | PaddleX Pipeline、vLLM、CUDA/Ascend 设备与推理镜像配置 | `paddleocr-server/` | 推理模块静态检查与目标硬件验证 |
-| 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py` |
+| 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`compose.replicas*.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py`、`tests/test_ascend_replicas.py` |
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。
-
-Ascend 可通过 `CONTRACTLENS_PIPELINE_MODE=replicas` 选择独立 overlay：
-`api → paddleocr-vl-api（Nginx）→ pipeline-1/2[/3/4] → paddleocr-vlm-server`。
-默认单 Pipeline 拓扑不变；代理仅分发 Pipeline 请求，网关协议与 VLM 地址保持不变。
-此 Ascend 扩展仅完成静态验证，运行容量须在 NPU 主机验收。

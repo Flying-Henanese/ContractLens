@@ -15,15 +15,17 @@ ContractLens api (:8888, business API)
 - `paddleocr-vlm-server` exposes one OpenAI-compatible internal API and schedules
   complete PaddleOCR-VL model instances through data parallelism.
 
-Root Compose waits for VLM health before Pipeline startup and Pipeline health before
-gateway startup. The root lifecycle helper starts, stops, restarts, and inspects all
-three services together.
+The diagram shows the default single-Pipeline topology. In Ascend replica mode,
+`paddleocr-vl-api` is Nginx and forwards requests to two or four Pipeline workers.
+Workers wait for VLM health, Nginx waits for worker health, and the gateway waits
+for Nginx health. The root lifecycle helper manages all services selected by the
+[root topology](../../../.harness/architecture/README.md#compose-拓扑).
 
 ## Inference-module boundary
 
 This module owns `PaddleOCR-VL-1.6.yaml`, `vllm_config.yaml`, and the VLM
 entrypoints. Root Compose mounts the complete directory read-only at
-`/opt/paddleocr-server` in both inference containers. `PaddleOCR-VL-1.6.yaml` keeps
+`/opt/paddleocr-server` in Pipeline and vLLM containers. `PaddleOCR-VL-1.6.yaml` keeps
 the VLM URL at `http://paddleocr-vlm-server:8118/v1`.
 
 The local two-service Compose files omit the gateway and are retained only as
@@ -34,9 +36,9 @@ topologies.
 
 - CUDA uses `CUDA_VISIBLE_DEVICES`; the one visible Pipeline device is addressed as
   `gpu:0` inside its container.
-- Ascend uses `ASCEND_RT_VISIBLE_DEVICES`; the one visible Pipeline device is
-  addressed as `npu:0`. Root Ascend Compose preserves `privileged`, driver,
-  `npu-smi`, and DCMI mounts.
+- Ascend uses `ASCEND_RT_VISIBLE_DEVICES` and explicit NPU device mounts. A
+  Pipeline process addresses its visible NPU as `npu:0`. See the
+  [Ascend guide](../../ASCEND.md#推理配置说明) for mappings and privilege settings.
 - VLM device-list length must equal `VLM_DATA_PARALLEL_SIZE`, and Pipeline/VLM
   physical devices must not overlap.
 

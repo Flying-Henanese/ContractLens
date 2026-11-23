@@ -1,7 +1,7 @@
 # 华为昇腾 NPU 推理模块参考
 
 `paddleocr-server/` 已导入 ContractLens 单仓库。它仍保存昇腾推理配置，但不再是
-ContractLens 的独立部署项目。生产环境必须从仓库根目录启动三服务栈：
+ContractLens 的独立部署项目。生产环境使用仓库根目录的统一生命周期。默认拓扑如下：
 
 ```text
 ContractLens api -> PaddleX Pipeline -> PaddleOCR-VL / vLLM
@@ -23,9 +23,9 @@ ContractLens 网关，并可能与根 Compose 的服务名或端口冲突。
 - 宿主机可执行 `npu-smi info`，并提供 `/usr/local/Ascend/driver`、
   `/usr/local/bin/npu-smi` 与 `/usr/local/dcmi`。
 - 已确认网关、PaddleX 与 vLLM 镜像可用，以及 `PADDLEX_CACHE_DIR` 存在且不得清理。
-- 根默认需要设备编号 `4,5,6,7` 可用：Pipeline 使用 NPU `7`，三个 VLM 数据并行副本使用
-  NPU `4,5,6`。设备编号不同的主机必须先调整环境文件；Pipeline 设备不得和 VLM 设备重叠，
-  且 VLM 设备数必须等于 `VLM_DATA_PARALLEL_SIZE`。
+- 默认需要设备编号 `4,5,6,7` 可用。Pipeline 使用 NPU `7`，三个 VLM 数据并行副本使用
+  NPU `4,5,6`。其他设备编号须核对环境变量和 Compose 的挂载映射。Pipeline 与 VLM 使用不同物理设备，
+  VLM 设备数须等于 `VLM_DATA_PARALLEL_SIZE`。
 
 所选昇腾推理镜像预期提供适配的 PaddlePaddle、NPU 插件与 vLLM 运行环境；不要替换为
 NVIDIA 镜像，并在目标主机上验证该预期。
@@ -60,11 +60,17 @@ healthcheck 本身请求容器内 `/v1/models`。根 Ascend Compose 不发布 `8
 
 ## 推理配置说明
 
-根 [`compose.ascend.yaml`](../compose.ascend.yaml) 保留昇腾专有的 `privileged`、driver、
-`npu-smi`、DCMI 挂载和 `ASCEND_RT_VISIBLE_DEVICES`。Pipeline 在容器内使用 `npu:0`，
-因为可见物理设备会被重新编号。两个推理服务以只读方式挂载整个本目录，因此
-`docker/vlm-entrypoint-ascend.sh`、`PaddleOCR-VL-1.6.yaml` 和 `vllm_config.yaml` 仍是
-推理配置事实源。
+根 [`compose.ascend.yaml`](../compose.ascend.yaml) 的推理容器默认以
+`ASCEND_PRIVILEGED=false` 运行，显式挂载 NPU 及管理设备、添加 `SYS_PTRACE`，
+并挂载驱动、`npu-smi`、DCMI、`/etc/ascend_install.info` 和 `/var/log/npu`。
+需要回滚权限模式时，在实际使用的 Compose 环境文件（默认 `.env.ascend`）设置
+`ASCEND_PRIVILEGED=true`，再运行统一入口的 `up`。显式设备挂载仍然保留。
+
+基础 Compose 固定挂载单 Pipeline 的 `/dev/davinci7` 和 VLM 的 `/dev/davinci4`、
+`/dev/davinci5`、`/dev/davinci6`。修改 `PIPELINE_NPU_ID` 或 `VLM_NPU_IDS` 时，
+要同时核对相应 `devices` 映射。副本 Overlay 则通过 `PIPELINE_NPU_ID` 同时选择 worker
+的设备挂载和可见设备。Pipeline 在容器内使用 `npu:0`。
+Pipeline 和 vLLM 均从各自的只读目录挂载读取本模块的入口与配置。
 
 本目录的 `compose.ascend.yaml` 仅保留为导入前的推理模块参考，不能替代上述根目录流程。
 
@@ -108,3 +114,19 @@ Nginx 不挂载 NPU，不自动重发 POST，读取超时为 120 秒。
 恢复单 Pipeline：将 env 文件中的模式设为 `single`，并导出
 `CONTRACTLENS_PIPELINE_MODE=single`，运行 `bash scripts/docker.sh up`。
 统一入口会恢复原 Pipeline 服务并移除副本，无需手动启动或停止独立容器。
+
+## 网关镜像构建：文件描述符不足
+
+若 `uv python install` 在标准库字节码编译时报 `No file descriptors available
+(os error 24)`，表示构建进程触及文件描述符上限；不是 PaddleOCR 或 NPU 推理错误。
+`Dockerfile.ascend` 关闭可选的 uv 字节码预编译（`UV_COMPILE_BYTECODE=0`），
+避免该编译阶段；依赖和 Python 版本保持原配置。未预编译可能增加 Python 冷启动耗时。
+修改后在保留 Ascend 平台和副本环境变量的终端执行：
+
+```bash
+bash scripts/docker.sh build
+bash scripts/docker.sh up
+```
+
+无需清空模型缓存或全量禁用 Docker 构建缓存。此变更仍需目标 ARM 构建器重建验证；
+若其他阶段也出现同类错误，应进一步检查构建器进程的 nofile 限制。

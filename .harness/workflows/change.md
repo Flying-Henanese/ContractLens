@@ -27,4 +27,15 @@
 
 ## 验证和交付
 
-优先运行最接近改动的测试，完成后运行 `& .\.harness\scripts\check.ps1`。涉及真实远端时遵循 [`remote-validation.md`](remote-validation.md)。最终报告已实现结果、主要文件、实际运行的命令和未验证风险，不声称未运行的测试通过。
+优先运行最接近改动的测试，完成后运行 `& .\.harness\scripts\check.ps1`。没有 PowerShell
+时，在仓库根目录逐项执行脚本中的同等检查：
+
+```sh
+uv run python .harness/scripts/harness_lint.py
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest --basetemp .pytest-tmp
+```
+
+Ruff 按根 `pyproject.toml` 排除推理模块和根目录 `tmp/` 临时文件。涉及真实远端时遵循
+[`remote-validation.md`](remote-validation.md)。最终报告主要改动、实际执行的检查和待验证事项。

@@ -4,8 +4,8 @@
 推理内部的配置、并发与硬件约束；ContractLens 的生产架构、部署入口和远端状态以仓库根目录
 的 `AGENTS.md` 与 `.harness/` 为准。
 
-本目录的双服务 Compose、宿主机启动脚本和历史硬件记录仅供理解或隔离调试，不能替代根目录
-三服务 Compose 生命周期。
+本目录的双服务 Compose、宿主机启动脚本和历史硬件记录可用于理解或隔离调试。生产使用根目录
+的统一 Compose 生命周期，拓扑见[根架构说明](../../.harness/architecture/README.md#compose-拓扑)。
 
 ## 使用顺序
 
