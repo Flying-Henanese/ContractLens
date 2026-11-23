@@ -16,7 +16,7 @@ x-pipeline: &pipeline
     paddleocr-vlm-server:
       condition: service_healthy
   environment:
-    ASCEND_RT_VISIBLE_DEVICES: ${PIPELINE_NPU_ID:-7}
+    ASCEND_RT_VISIBLE_DEVICES: "3"
     PIPELINE_SUBGRAPH_CONCURRENCY: ${PIPELINE_SUBGRAPH_CONCURRENCY:-16}
   command:
     - bash

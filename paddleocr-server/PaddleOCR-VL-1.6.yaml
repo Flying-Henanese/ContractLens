@@ -40,7 +40,7 @@ SubModules:
     model_name: PP-DocLayoutV3
     model_dir: null
     # 单轮版面检测批量；过大可能增加 Pipeline GPU/NPU 显存占用。
-    batch_size: 8
+    batch_size: 32
     # 各版面类别的置信度阈值；索引 20 为 seal，使用更高阈值过滤模糊印章。
     threshold:
       0: 0.3
@@ -111,13 +111,13 @@ SubModules:
       # Docker Compose 使用服务名；start_vl.sh 会生成指向 127.0.0.1 的本地配置。
       server_url: http://paddleocr-vlm-server:8118/v1
       # Pipeline 同时提交给 vLLM 的版面块请求上限。
-      max_concurrency: 16
+      max_concurrency: 32
 
 SubPipelines:
   DocPreprocessor:
     pipeline_name: doc_preprocessor
     # 文档预处理的单轮批量。
-    batch_size: 8
+    batch_size: 32
     # 检测并纠正文档的整体旋转方向。
     use_doc_orientation_classify: True
     # 对弯曲、透视或拍摄形变的文档进行展平校正。

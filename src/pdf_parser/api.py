@@ -15,7 +15,7 @@ from pdf_parser.ingestion.image import detect_image_format
 from pdf_parser.models import ParseResponse
 from pdf_parser.service import parse_image, parse_pdf
 
-DOCUMENT_TIMEOUT_SECONDS = 300.0
+DOCUMENT_TIMEOUT_SECONDS = 600.0
 RECEIPT_TIMEOUT_SECONDS = 120.0
 
 _DOCUMENT_PDF_SUFFIXES = {".pdf"}

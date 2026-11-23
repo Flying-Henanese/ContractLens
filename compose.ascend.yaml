@@ -49,7 +49,8 @@ services:
         condition: service_healthy
 
   paddleocr-vlm-server:
-    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:${ASCEND_VLM_IMAGE_TAG:-latest-huawei-npu}
+    image: quay.io/ascend/vllm-ascend:v0.30.0rc2
+    # image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:${ASCEND_VLM_IMAGE_TAG:-latest-huawei-npu}
     user: root
     init: true
     privileged: true
@@ -61,15 +62,43 @@ services:
       VLM_GPU_MEMORY_UTILIZATION: ${VLM_GPU_MEMORY_UTILIZATION:-0.3}
       VLM_MAX_NUM_SEQS: ${VLM_MAX_NUM_SEQS:-16}
       VLM_MAX_NUM_BATCHED_TOKENS: ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
+    entrypoint: ["vllm"]    
     command:
-      - /bin/bash
-      - /opt/paddleocr-server/docker/vlm-entrypoint-ascend.sh
+      - serve
+      - /models/PaddleOCR-VL
+      - --served-model-name
+      - ${VLM_MODEL:-PaddleOCR-VL-1.6-0.9B}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8118"
+      - --trust-remote-code
+      - --tensor-parallel-size
+      - "1" 
+      - --data-parallel-size
+      - ${VLM_DATA_PARALLEL_SIZE:-3}
+      - --data-parallel-backend
+      - ${VLM_DATA_PARALLEL_BACKEND:-mp}
+      - --gpu-memory-utilization
+      - ${VLM_GPU_MEMORY_UTILIZATION:-0.3}
+      - --max-num-seqs
+      - ${VLM_MAX_NUM_SEQS:-16}
+      - --max-num-batched-tokens
+      - ${VLM_MAX_NUM_BATCHED_TOKENS:-16384}
+      - --no-enable-prefix-caching
+      - --mm-processor-cache-gb
+      - "0"
+      - --api-server-count
+      - "1"
+      # - /bin/bash
+      # - /opt/paddleocr-server/docker/vlm-entrypoint-ascend.sh
     volumes:
       - ./paddleocr-server:/opt/paddleocr-server:ro
       - ${PADDLEX_CACHE_DIR:-/home/mineru_dev/.paddlex}:/home/paddleocr/.paddlex
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver
       - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
       - /usr/local/dcmi:/usr/local/dcmi
+      - /data1/models/PaddlePaddle/PaddleOCR-VL:/models/PaddleOCR-VL:ro
     shm_size: 64gb
     restart: unless-stopped
     healthcheck:
