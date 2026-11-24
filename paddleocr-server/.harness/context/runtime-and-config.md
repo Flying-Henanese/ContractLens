@@ -34,6 +34,9 @@ inference-only references and are not a deployment entry point.
   `/dev/davinci${PIPELINE_NPU_ID:-7}` while their `ASCEND_RT_VISIBLE_DEVICES` is fixed
   at `3`. Check which physical device the target runtime exposes before enabling
   replicas. Changing `PIPELINE_NPU_ID` changes the worker mount only.
+- `colocated` mode uses four replica workers with a separate physical NPU per
+  worker and uses those same cards for one vLLM API Server with DP4. The root
+  lifecycle script derives Compose device parameters from the configured ID lists.
 
 ## Configuration layering
 
@@ -41,7 +44,7 @@ inference-only references and are not a deployment entry point.
    parameters.
 2. Root Compose manages the gateway, Pipeline, and VLM in one lifecycle. The
    gateway calls `http://paddleocr-vl-api:8080`; this service runs Nginx when
-   Ascend replica mode is selected.
+   Ascend replica or colocated mode is selected.
 3. Root Compose mounts this directory read-only at `/opt/paddleocr-server` in
    the inference containers. PaddleX reads its Pipeline YAML there, and the CUDA
    VLM entrypoint reads its configuration template there.
@@ -49,9 +52,10 @@ inference-only references and are not a deployment entry point.
    `http://paddleocr-vlm-server:8118/v1`.
 
 `VLM_NPU_IDS` or `VLM_GPU_IDS` must contain exactly
-`VLM_DATA_PARALLEL_SIZE` devices; the Pipeline device must not overlap with the
-VLM list. Check the full mapping before starting Ascend, whose direct startup bypasses
-the repository's scripted device-count check. Compose parsing resolves the values only.
+`VLM_DATA_PARALLEL_SIZE` devices. Pipeline and VLM use separate physical devices in
+the default and regular replica modes. For those Ascend modes, verify the full device
+mapping and DP count before starting vLLM. In colocated mode the root lifecycle script
+validates list shape and distinct IDs. Physical correspondence requires a host check.
 
 ## Operational entry
 

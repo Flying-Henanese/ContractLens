@@ -59,6 +59,9 @@ Compose 网络内使用。Pipeline 和 vLLM 容器将 `./paddleocr-server` 只�
   通过 `CONTRACTLENS_PIPELINE_WORKERS=2` 或 `4` 选择副本数。Overlay 将
   `paddleocr-vl-api` 替换为 Nginx，Nginx 等待所有 Pipeline worker 健康，再为请求做
   `least_conn` 分发。各 worker 共享 Pipeline 设备配置与一个 vLLM 服务。网关沿用原服务名和协议。
+- Ascend 可另外选择 `CONTRACTLENS_PIPELINE_MODE=colocated`。四个 Pipeline worker 分别挂载
+  四张 NPU，各卡同时运行共享 vLLM API Server 的一个 DP rank。Nginx 按文档请求分流，
+  vLLM 按版面块在 rank 间分流。设备节点与 CANN 可见编号由启动参数映射。
 - Ascend 的启动、设备映射、并发容量和真实解析仍需目标主机验证。见
   [推理验证清单](../../paddleocr-server/.harness/checklists/verification.md)。
 
@@ -82,6 +85,6 @@ Compose 网络内使用。Pipeline 和 vLLM 容器将 `./paddleocr-server` 只�
 | 最终 JSON 类型和字段 | `src/pdf_parser/models.py` | 归一化、服务和 harness 验证测试 |
 | 用户可见领域异常 | `src/pdf_parser/errors.py` | 最接近异常来源的测试 |
 | PaddleX Pipeline、vLLM、CUDA/Ascend 设备与推理镜像配置 | `paddleocr-server/` | 推理模块静态检查与目标硬件验证 |
-| 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`compose.replicas*.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py`、`tests/test_ascend_replicas.py` |
+| 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`compose.replicas*.ascend.yaml`、`compose.colocated.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py`、`tests/test_ascend_replicas.py` |
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。

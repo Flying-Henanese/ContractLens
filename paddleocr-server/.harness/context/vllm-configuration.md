@@ -78,7 +78,8 @@ Compose 解析均需配合部署前设备预检。
 
 ## 设备隔离
 
-- Pipeline GPU/NPU 与 VLM GPU/NPU 按部署约束应当分离。
+- 默认和普通副本部署的 Pipeline 与 VLM 设备分离。Ascend `colocated` 模式每卡部署
+  一个 Pipeline worker 和一个 vLLM DP rank，共享一个 vLLM API Server。
 - CUDA 通过 `CUDA_VISIBLE_DEVICES` 暴露物理 GPU。
 - 昇腾通过 `ASCEND_RT_VISIBLE_DEVICES` 选择可见 NPU，副本的显式设备挂载与可见编号需在实机核对。
 - 容器内设备会重新编号，Pipeline 使用 `gpu:0` 或 `npu:0` 是预期行为。

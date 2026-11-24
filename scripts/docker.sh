@@ -5,6 +5,7 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly ACTION="${1:-config}"
 readonly CONTRACTLENS_PLATFORM="${CONTRACTLENS_PLATFORM:-cuda}"
+readonly PIPELINE_MODE="${CONTRACTLENS_PIPELINE_MODE:-single}"
 
 case "${CONTRACTLENS_PLATFORM}" in
     cuda)
@@ -21,23 +22,75 @@ case "${CONTRACTLENS_PLATFORM}" in
         ;;
 esac
 
-# Ascend replicas are opt-in; preserve the default single-Pipeline topology.
-COMPOSE_REPLICAS_ARGS=()
-case "${CONTRACTLENS_PIPELINE_MODE:-single}" in
+validate_colocated_ids() {
+    local name="$1" value="$2" require_unique="$3"
+    local id seen=,
+    local -a ids
+
+    if [[ ! "${value}" =~ ^(0|[1-9][0-9]*)(,(0|[1-9][0-9]*)){3}$ ]]; then
+        echo "${name} must contain four comma-separated NPU IDs." >&2
+        exit 2
+    fi
+    if [[ "${require_unique}" == true ]]; then
+        IFS=, read -r -a ids <<< "${value}"
+        for id in "${ids[@]}"; do
+            if [[ "${seen}" == *",${id},"* ]]; then
+                echo "${name} must contain distinct NPU IDs." >&2
+                exit 2
+            fi
+            seen+="${id},"
+        done
+    fi
+}
+
+configure_colocated_devices() {
+    local device_ids="${CONTRACTLENS_COLOCATED_NPU_IDS:-4,5,6,7}"
+    local pipeline_ids="${CONTRACTLENS_COLOCATED_PIPELINE_RT_IDS:-${device_ids}}"
+    local vlm_ids="${CONTRACTLENS_COLOCATED_VLM_RT_IDS:-${device_ids}}"
+    local index
+    local -a devices pipeline vlm
+
+    validate_colocated_ids CONTRACTLENS_COLOCATED_NPU_IDS "${device_ids}" true
+    validate_colocated_ids CONTRACTLENS_COLOCATED_PIPELINE_RT_IDS "${pipeline_ids}" false
+    validate_colocated_ids CONTRACTLENS_COLOCATED_VLM_RT_IDS "${vlm_ids}" true
+    IFS=, read -r -a devices <<< "${device_ids}"
+    IFS=, read -r -a pipeline <<< "${pipeline_ids}"
+    IFS=, read -r -a vlm <<< "${vlm_ids}"
+    for index in 0 1 2 3; do
+        export "CONTRACTLENS_COLOCATED_DEVICE_$((index + 1))=${devices[index]}"
+        export "CONTRACTLENS_COLOCATED_WORKER_RT_$((index + 1))=${pipeline[index]}"
+    done
+    # CANN requires an ascending visibility list. The shared server can assign any rank.
+    VLM_NPU_IDS="$(printf '%s\n' "${vlm[@]}" | sort -n | paste -sd , -)"
+    export VLM_NPU_IDS
+    export VLM_DATA_PARALLEL_SIZE=4
+    export VLM_DATA_PARALLEL_BACKEND=mp
+}
+
+COMPOSE_OVERLAY_ARGS=()
+case "${PIPELINE_MODE}" in
     single) ;;
-    replicas)
+    replicas|colocated)
         if [[ "${CONTRACTLENS_PLATFORM}" != ascend ]]; then
-            echo "This checkout supports replicas on Ascend only." >&2
+            echo "Pipeline mode ${PIPELINE_MODE} requires Ascend." >&2
             exit 2
         fi
-        COMPOSE_REPLICAS_ARGS=(-f "${PROJECT_ROOT}/compose.replicas.ascend.yaml")
-        case "${CONTRACTLENS_PIPELINE_WORKERS:-2}" in
-            2) ;;
-            4) COMPOSE_REPLICAS_ARGS+=(-f "${PROJECT_ROOT}/compose.replicas4.ascend.yaml") ;;
-            *) echo "Pipeline workers must be 2 or 4." >&2; exit 2 ;;
-        esac
+        COMPOSE_OVERLAY_ARGS=(-f "${PROJECT_ROOT}/compose.replicas.ascend.yaml")
+        if [[ "${PIPELINE_MODE}" == colocated ]]; then
+            configure_colocated_devices
+            COMPOSE_OVERLAY_ARGS+=(
+                -f "${PROJECT_ROOT}/compose.replicas4.ascend.yaml"
+                -f "${PROJECT_ROOT}/compose.colocated.ascend.yaml"
+            )
+        else
+            case "${CONTRACTLENS_PIPELINE_WORKERS:-2}" in
+                2) ;;
+                4) COMPOSE_OVERLAY_ARGS+=(-f "${PROJECT_ROOT}/compose.replicas4.ascend.yaml") ;;
+                *) echo "Pipeline workers must be 2 or 4." >&2; exit 2 ;;
+            esac
+        fi
         ;;
-    *) echo "Pipeline mode must be single or replicas." >&2; exit 2 ;;
+    *) echo "Pipeline mode must be single, replicas, or colocated." >&2; exit 2 ;;
 esac
 
 readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
@@ -47,7 +100,7 @@ if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
 fi
 
 compose() {
-    docker compose ${COMPOSE_ENV_ARGS[@]+"${COMPOSE_ENV_ARGS[@]}"} -f "${COMPOSE_FILE}" ${COMPOSE_REPLICAS_ARGS[@]+"${COMPOSE_REPLICAS_ARGS[@]}"} "$@"
+    docker compose ${COMPOSE_ENV_ARGS[@]+"${COMPOSE_ENV_ARGS[@]}"} -f "${COMPOSE_FILE}" ${COMPOSE_OVERLAY_ARGS[@]+"${COMPOSE_OVERLAY_ARGS[@]}"} "$@"
 }
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -64,7 +117,11 @@ cd "${PROJECT_ROOT}"
 
 case "${ACTION}" in
     config)
-        compose config --quiet
+        if (( $# > 1 )); then
+            compose config "${@:2}"
+        else
+            compose config --quiet
+        fi
         ;;
     build)
         compose build --pull

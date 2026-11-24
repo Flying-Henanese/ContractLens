@@ -60,17 +60,11 @@ healthcheck 本身请求容器内 `/v1/models`。根 Ascend Compose 不发布 `8
 
 ## 推理配置说明
 
-根 [`compose.ascend.yaml`](../compose.ascend.yaml) 的推理容器默认以
-`ASCEND_PRIVILEGED=false` 运行，显式挂载 NPU 及管理设备、添加 `SYS_PTRACE`，
-并挂载驱动、`npu-smi`、DCMI、`/etc/ascend_install.info` 和 `/var/log/npu`。
-需要回滚权限模式时，在实际使用的 Compose 环境文件（默认 `.env.ascend`）设置
-`ASCEND_PRIVILEGED=true`，再运行统一入口的 `up`。显式设备挂载仍然保留。
-
-基础 Compose 固定挂载单 Pipeline 的 `/dev/davinci7` 和 VLM 的 `/dev/davinci4`、
-`/dev/davinci5`、`/dev/davinci6`。修改 `PIPELINE_NPU_ID` 或 `VLM_NPU_IDS` 时，
-要同时核对相应 `devices` 映射。副本 Overlay 则通过 `PIPELINE_NPU_ID` 同时选择 worker
-的设备挂载和可见设备。Pipeline 在容器内使用 `npu:0`。
-Pipeline 和 vLLM 均从各自的只读目录挂载读取本模块的入口与配置。
+根 [Compose](../compose.ascend.yaml) 的基础推理容器使用特权模式，通过
+`ASCEND_RT_VISIBLE_DEVICES` 选择运行时设备。副本 overlay 的 worker 默认以
+`ASCEND_PRIVILEGED=false` 运行，并显式挂载 NPU 和管理设备。
+普通副本模式使用 `PIPELINE_NPU_ID` 选择设备节点，worker 的 CANN 可见编号固定为 `3`。
+四卡共卡模式可以分别配置每个 worker 的设备节点和可见编号。Pipeline 在容器内使用 `npu:0`。
 
 本目录的 `compose.ascend.yaml` 仅保留为导入前的推理模块参考，不能替代上述根目录流程。
 
@@ -101,8 +95,8 @@ bash scripts/docker.sh ps
 ```
 
 默认多个 Pipeline 共享 NPU 7，VLM 保持 NPU 4/5/6、DP=3。
-副本没有独立宿主机端口。`PIPELINE_NPU_ID` 同时控制 worker 的设备挂载和可见设备；
-设备必须存在且不能与 VLM 重叠。基础 Compose 的 VLM 设备挂载仍需与实际设备配置核对。
+副本没有独立宿主机端口。应核对 `PIPELINE_NPU_ID` 对应的设备和固定可见编号，确保
+普通副本的物理设备与 VLM 分离。
 所有 worker 继承当前 Ascend 驱动、缓存与设备管理挂载，网关仍连接原服务名。
 Nginx 不挂载 NPU，不自动重发 POST，读取超时为 120 秒。
 
@@ -114,6 +108,42 @@ Nginx 不挂载 NPU，不自动重发 POST，读取超时为 120 秒。
 恢复单 Pipeline：将 env 文件中的模式设为 `single`，并导出
 `CONTRACTLENS_PIPELINE_MODE=single`，运行 `bash scripts/docker.sh up`。
 统一入口会恢复原 Pipeline 服务并移除副本，无需手动启动或停止独立容器。
+
+## 四卡共卡部署
+
+每张卡运行一个 PaddleX worker 和一个 vLLM rank。四个 worker 共用
+`http://paddleocr-vlm-server:8118/v1`。单个 vLLM API Server 以 `TP=1`、`DP=4`、`mp`
+启动并在四个 rank 间分发版面块。Nginx 继续在四个 PaddleX worker 间分发文档请求。
+
+从仓库根目录运行以下命令。模式和卡号列表由生命周期脚本读取，请在 Shell 中导出。
+其他推理参数仍从部署环境文件读取，默认使用 `.env.ascend`。
+
+```bash
+export CONTRACTLENS_PLATFORM=ascend
+export CONTRACTLENS_PIPELINE_MODE=colocated
+export CONTRACTLENS_COLOCATED_NPU_IDS=4,5,6,7
+bash scripts/docker.sh config
+bash scripts/docker.sh config --format json
+```
+
+`CONTRACTLENS_COLOCATED_NPU_IDS` 按 `pipeline-1` 到 `pipeline-4` 的顺序指定宿主机
+`/dev/davinciN` 设备。若 CANN 的可见编号与设备文件编号不同，使用下列变量表达各自的编号，
+两个列表的每个位置都要指向物理列表同一位置的卡。
+脚本按 CANN 要求对传给 vLLM 的可见编号做数值升序排列，worker 的设备分配按原顺序。
+普通副本模式曾用 `/dev/davinci7` 配合可见编号 `3`，请按现场映射确认共卡变量。
+[华为 CANN 可见设备说明](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/900/maintenref/envvar/envref_07_0028.html)
+
+| Shell 变量 | 用途 | 默认 |
+| --- | --- | --- |
+| `CONTRACTLENS_COLOCATED_PIPELINE_RT_IDS` | 各独立 worker 容器中的 CANN 可见编号。独立容器的编号可以重复 | 沿用物理列表 |
+| `CONTRACTLENS_COLOCATED_VLM_RT_IDS` | vLLM 容器中四张卡的 CANN 可见编号，四个编号必须不同 | 沿用物理列表 |
+
+现场确认设备编号后，在同一 Shell 执行 `bash scripts/docker.sh up` 和 `bash scripts/docker.sh ps`。
+用 `npu-smi info` 核对每张物理卡上的 PaddleX 和 vLLM 进程，检查 `/v1/models`，再用代表性 PDF
+验证完整页数、耗时、各 rank 的负载和每张卡的 HBM 峰值。当前共卡模式仅通过静态配置检查。
+
+恢复分卡部署时，将 `CONTRACTLENS_PIPELINE_MODE` 切回 `replicas` 或 `single`，按原配置运行
+`bash scripts/docker.sh up`。`VLM_NPU_IDS` 和 `VLM_DATA_PARALLEL_SIZE` 将重新从原配置读取。
 
 ## 网关镜像构建：文件描述符不足
 

@@ -15,8 +15,8 @@ ContractLens api (:8888, business API)
 - `paddleocr-vlm-server` exposes one OpenAI-compatible internal API and schedules
   complete PaddleOCR-VL model instances through data parallelism.
 
-The diagram shows the default single-Pipeline topology. In Ascend replica mode,
-`paddleocr-vl-api` is Nginx and forwards requests to two or four Pipeline workers.
+The diagram shows the default single-Pipeline topology. In Ascend replica or
+colocated mode, `paddleocr-vl-api` is Nginx and forwards requests to the Pipeline workers.
 Workers wait for VLM health, Nginx waits for worker health, and the gateway waits
 for Nginx health. The root lifecycle helper manages all services selected by the
 [root topology](../../../.harness/architecture/README.md#compose-拓扑).
@@ -39,8 +39,9 @@ topologies.
 - The base Ascend services use privileged containers with `ASCEND_RT_VISIBLE_DEVICES`.
   The replica overlay sets explicit worker device mounts. A Pipeline process addresses
   its visible NPU as `npu:0`. See the [current mappings](runtime-and-config.md#huawei-ascend).
-- VLM device-list length must equal `VLM_DATA_PARALLEL_SIZE`, and Pipeline/VLM
-  physical devices must not overlap.
+- VLM device-list length must equal `VLM_DATA_PARALLEL_SIZE`. Pipeline and VLM use
+  separate physical devices by default. Ascend colocated mode puts one worker and
+  one VLM rank on each selected card.
 
 Static configuration cannot establish device availability or runtime compatibility.
 The root Ascend topology remains unverified on target hardware.

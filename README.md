@@ -214,5 +214,7 @@ uv run pytest
 ### Ascend 多 Pipeline（仅静态验证）
 
 可选拓扑为 `api → Nginx → 2/4 个 Pipeline → Ascend vLLM`。
+四卡共卡模式使用 `CONTRACTLENS_PIPELINE_MODE=colocated`，每卡运行一个 Pipeline worker
+和一个 vLLM DP rank，四个 rank 共用一个 vLLM API Server。
 仅切换 Pipeline 拓扑时，可继续使用已有的网关和推理镜像。
-部署和硬件验收步骤见 [Ascend 指南](paddleocr-server/ASCEND.md#多-pipeline-静态适配)。
+部署和硬件验收步骤见 [Ascend 指南](paddleocr-server/ASCEND.md#四卡共卡部署)。

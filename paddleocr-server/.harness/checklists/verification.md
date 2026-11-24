@@ -31,6 +31,7 @@ CONTRACTLENS_PLATFORM=ascend CONTRACTLENS_PIPELINE_MODE=replicas \
   CONTRACTLENS_PIPELINE_WORKERS=2 bash scripts/docker.sh config
 CONTRACTLENS_PLATFORM=ascend CONTRACTLENS_PIPELINE_MODE=replicas \
   CONTRACTLENS_PIPELINE_WORKERS=4 bash scripts/docker.sh config
+CONTRACTLENS_PLATFORM=ascend CONTRACTLENS_PIPELINE_MODE=colocated bash scripts/docker.sh config
 ```
 
 ## 服务检查
@@ -46,7 +47,7 @@ curl --fail http://127.0.0.1:8880/health
 ```
 
 - VLM 的 `/v1/models` 正常。
-- 网关、PaddleX 与 VLM 的容器 healthcheck 为 `healthy`。使用副本模式时，
+- 网关、PaddleX 与 VLM 的容器 healthcheck 为 `healthy`。使用副本或共卡模式时，
   确认代理和全部 worker 健康，并核对实际 NPU 映射和生成的 `/tmp/pipeline-replicas.yaml`。
 - Ascend vLLM 的 `8118` 在容器内检查，启动日志应显示实际加载的本地模型和预期的 DP rank。
 - 分配的每张 GPU/NPU 加载了预期模型。

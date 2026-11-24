@@ -12,7 +12,8 @@
 
 这是默认单 Pipeline 拓扑，VLM 计算负载通过数据并行分布到多张 GPU/NPU。
 Ascend 副本模式由 Nginx 向同一 NPU 上的 2 或 4 个 PaddleX 进程分发请求，
-各进程共享同一个 vLLM 入口。副本数与真实请求并行度需分别记录。
+各进程共享同一个 vLLM 入口。Ascend 共卡模式把四个 PaddleX worker 分配到四张卡，
+每卡另有一个共享 vLLM 服务的 DP rank。副本数与真实请求并行度需分别记录。
 
 ## 三层并发
 

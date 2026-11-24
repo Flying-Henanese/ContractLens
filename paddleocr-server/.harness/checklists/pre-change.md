@@ -15,8 +15,8 @@
 - 涉及并发、吞吐或扩容时先阅读 `context/concurrency-model.md`。
 - 确认设备列表数量与数据并行模型实例数一致。CUDA 入口在启动时复核数量；根 Ascend
   直接启动 vLLM，预检时核对 `ASCEND_RT_VISIBLE_DEVICES`、副本设备挂载和 DP 参数。
-- 确认 Pipeline 与 VLM 不会使用同一物理设备。`start_vl.sh` 会检查 CUDA
-  重叠；CUDA/昇腾 Compose 当前不会检查两组设备是否重叠。
+- 默认和普通副本模式需确认 Pipeline 与 VLM 的物理设备分离。昇腾 `colocated`
+  模式需确认每个 worker 和对应 rank 位于同一张物理卡，且四张卡互不重复。
 - 确认改动属于客户端请求压力、单次 Pipeline 内部队列、子图请求并发、实例内
   批处理、Pipeline 副本数或模型实例扩展中的哪一层。普通 `paddlex --serve`
   的请求串行行为以目标镜像为准。

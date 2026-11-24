@@ -45,7 +45,9 @@ multiple data-parallel model ranks. The optional Ascend Nginx topology uses the 
 vLLM service. Further proxy, Ray Serve, or VLM addressing changes require explicit
 user direction.
 
-- Keep Pipeline and VLM physical GPU/NPU assignments separate.
+- Keep Pipeline and VLM physical assignments separate in the default and replica
+  topologies. The opt-in Ascend `colocated` mode pairs a Pipeline worker and a vLLM
+  DP rank per physical NPU and retains a single vLLM API Server.
 - The number of `VLM_GPU_IDS` or `VLM_NPU_IDS` must equal
   `VLM_DATA_PARALLEL_SIZE`; the VLM entrypoint checks this at startup.
 - Do not change model versions, image tags, inference dependencies, NCCL settings,

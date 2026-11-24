@@ -1,0 +1,34 @@
+# Applied after both Ascend replica overlays by scripts/docker.sh.
+services:
+  pipeline-1:
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${CONTRACTLENS_COLOCATED_WORKER_RT_1:?Use scripts/docker.sh in colocated mode}
+    devices: !override
+      - /dev/davinci${CONTRACTLENS_COLOCATED_DEVICE_1:?Use scripts/docker.sh in colocated mode}
+      - /dev/davinci_manager
+      - /dev/devmm_svm
+      - /dev/hisi_hdc
+  pipeline-2:
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${CONTRACTLENS_COLOCATED_WORKER_RT_2:?Use scripts/docker.sh in colocated mode}
+    devices: !override
+      - /dev/davinci${CONTRACTLENS_COLOCATED_DEVICE_2:?Use scripts/docker.sh in colocated mode}
+      - /dev/davinci_manager
+      - /dev/devmm_svm
+      - /dev/hisi_hdc
+  pipeline-3:
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${CONTRACTLENS_COLOCATED_WORKER_RT_3:?Use scripts/docker.sh in colocated mode}
+    devices: !override
+      - /dev/davinci${CONTRACTLENS_COLOCATED_DEVICE_3:?Use scripts/docker.sh in colocated mode}
+      - /dev/davinci_manager
+      - /dev/devmm_svm
+      - /dev/hisi_hdc
+  pipeline-4:
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${CONTRACTLENS_COLOCATED_WORKER_RT_4:?Use scripts/docker.sh in colocated mode}
+    devices: !override
+      - /dev/davinci${CONTRACTLENS_COLOCATED_DEVICE_4:?Use scripts/docker.sh in colocated mode}
+      - /dev/davinci_manager
+      - /dev/devmm_svm
+      - /dev/hisi_hdc
