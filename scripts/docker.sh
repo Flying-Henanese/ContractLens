@@ -5,7 +5,6 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly ACTION="${1:-config}"
 readonly CONTRACTLENS_PLATFORM="${CONTRACTLENS_PLATFORM:-cuda}"
-readonly PIPELINE_MODE="${CONTRACTLENS_PIPELINE_MODE:-single}"
 
 case "${CONTRACTLENS_PLATFORM}" in
     cuda)
@@ -21,6 +20,32 @@ case "${CONTRACTLENS_PLATFORM}" in
         exit 2
         ;;
 esac
+
+cd "${PROJECT_ROOT}"
+readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
+
+# Read only literal topology settings. Do not execute the Compose env file as Bash.
+topology_setting() {
+    local name="$1" fallback="$2" value
+    value="${!name-}"
+    if [[ -z "${value}" && "${CONTRACTLENS_PLATFORM}" == ascend && -f "${CONTRACTLENS_ENV_FILE}" ]]; then
+        value="$(awk -v name="${name}" -v single_quote="'" '
+            $0 ~ "^[[:space:]]*(export[[:space:]]+)?" name "[[:space:]]*=" {
+                value = $0
+                sub(/^[^=]*=[[:blank:]]*/, "", value)
+                sub(/[[:space:]]+#.*$/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                quote = substr(value, 1, 1)
+                if (length(value) > 1 && (quote == "\"" || quote == single_quote) &&
+                    substr(value, length(value)) == quote) {
+                    value = substr(value, 2, length(value) - 2)
+                }
+            }
+            END { print value }
+        ' "${CONTRACTLENS_ENV_FILE}")"
+    fi
+    printf '%s\n' "${value:-${fallback}}"
+}
 
 validate_colocated_ids() {
     local name="$1" value="$2" require_unique="$3"
@@ -44,12 +69,12 @@ validate_colocated_ids() {
 }
 
 configure_colocated_devices() {
-    local device_ids="${CONTRACTLENS_COLOCATED_NPU_IDS:-4,5,6,7}"
-    local pipeline_ids="${CONTRACTLENS_COLOCATED_PIPELINE_RT_IDS:-${device_ids}}"
-    local vlm_ids="${CONTRACTLENS_COLOCATED_VLM_RT_IDS:-${device_ids}}"
-    local index
+    local device_ids pipeline_ids vlm_ids index
     local -a devices pipeline vlm
 
+    device_ids="$(topology_setting CONTRACTLENS_COLOCATED_NPU_IDS 4,5,6,7)"
+    pipeline_ids="$(topology_setting CONTRACTLENS_COLOCATED_PIPELINE_RT_IDS "${device_ids}")"
+    vlm_ids="$(topology_setting CONTRACTLENS_COLOCATED_VLM_RT_IDS "${device_ids}")"
     validate_colocated_ids CONTRACTLENS_COLOCATED_NPU_IDS "${device_ids}" true
     validate_colocated_ids CONTRACTLENS_COLOCATED_PIPELINE_RT_IDS "${pipeline_ids}" false
     validate_colocated_ids CONTRACTLENS_COLOCATED_VLM_RT_IDS "${vlm_ids}" true
@@ -68,6 +93,7 @@ configure_colocated_devices() {
 }
 
 COMPOSE_OVERLAY_ARGS=()
+PIPELINE_MODE="$(topology_setting CONTRACTLENS_PIPELINE_MODE single)"
 case "${PIPELINE_MODE}" in
     single) ;;
     replicas|colocated)
@@ -83,7 +109,7 @@ case "${PIPELINE_MODE}" in
                 -f "${PROJECT_ROOT}/compose.colocated.ascend.yaml"
             )
         else
-            case "${CONTRACTLENS_PIPELINE_WORKERS:-2}" in
+            case "$(topology_setting CONTRACTLENS_PIPELINE_WORKERS 2)" in
                 2) ;;
                 4) COMPOSE_OVERLAY_ARGS+=(-f "${PROJECT_ROOT}/compose.replicas4.ascend.yaml") ;;
                 *) echo "Pipeline workers must be 2 or 4." >&2; exit 2 ;;
@@ -93,7 +119,6 @@ case "${PIPELINE_MODE}" in
     *) echo "Pipeline mode must be single, replicas, or colocated." >&2; exit 2 ;;
 esac
 
-readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
 COMPOSE_ENV_ARGS=()
 if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
     COMPOSE_ENV_ARGS=(--env-file "${CONTRACTLENS_ENV_FILE}")
@@ -112,8 +137,6 @@ if ! docker compose version >/dev/null 2>&1; then
     echo "Docker Compose v2 is not available." >&2
     exit 1
 fi
-
-cd "${PROJECT_ROOT}"
 
 case "${ACTION}" in
     config)
