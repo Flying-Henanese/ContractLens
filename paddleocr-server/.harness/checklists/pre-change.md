@@ -10,11 +10,11 @@
 - 涉及 CUDA 时核对根 `README.md`、`../compose.yaml` 和 `../.env.template`。
 - 涉及昇腾时核对根 `../docs/container-deployment.md`、`../compose.ascend.yaml`
   和 `../.env.ascend.template`；本目录的同名 Compose 仅作历史推理参考。
-- 涉及 VLM 时同时检查 entrypoint、`vllm_config.yaml` 和环境变量。
+- 涉及 VLM 时核对[平台启动方式](../context/runtime-and-config.md)、有效参数和环境变量。
 - 涉及 Pipeline 时检查 `PaddleOCR-VL-1.6.yaml` 与实际 VLM 地址。
 - 涉及并发、吞吐或扩容时先阅读 `context/concurrency-model.md`。
-- 确认设备列表数量与数据并行模型实例数仍然一致。容器 VLM entrypoint 会在
-  启动时检查这一项，但 `docker compose config` 不会检查。
+- 确认设备列表数量与数据并行模型实例数一致。CUDA 入口在启动时复核数量；根 Ascend
+  直接启动 vLLM，预检时核对 `ASCEND_RT_VISIBLE_DEVICES`、副本设备挂载和 DP 参数。
 - 确认 Pipeline 与 VLM 不会使用同一物理设备。`start_vl.sh` 会检查 CUDA
   重叠；CUDA/昇腾 Compose 当前不会检查两组设备是否重叠。
 - 确认改动属于客户端请求压力、单次 Pipeline 内部队列、子图请求并发、实例内

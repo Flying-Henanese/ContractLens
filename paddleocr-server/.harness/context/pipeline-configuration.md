@@ -63,13 +63,14 @@ aside_text
 ```yaml
 module_name: layout_detection
 model_name: PP-DocLayoutV3
-batch_size: 8
+batch_size: 32
 layout_nms: True
 layout_unclip_ratio: [1.0, 1.0]
 ```
 
 当前 25 个版面类别大多使用 `0.3` 阈值。`seal` 类别对应索引 `20`，阈值提高为
 `0.9`，用于过滤不清晰或低置信度印章区域。
+网关默认在请求中显式发送 `layoutThreshold=0.5`。实际采用的阈值以目标服务处理该请求时的参数为准。
 
 `layout_merge_bboxes_mode` 按类别选择：
 
@@ -89,15 +90,16 @@ batch_size: 4096
 genai_config:
   backend: vllm-server
   server_url: http://paddleocr-vlm-server:8118/v1
-  max_concurrency: 16
+  max_concurrency: 32
 ```
 
 - VLM 推理由独立的 vLLM Server 提供。
 - Compose 使用服务名访问；`start_vl.sh` 在运行时将地址替换为
   `http://127.0.0.1:8118/v1`。
-- `max_concurrency: 16` 控制 Pipeline 同时提交的版面块请求数。
-- Ascend 副本入口用环境变量 `PIPELINE_SUBGRAPH_CONCURRENCY`（默认为 16）生成临时配置，
-  该值按 worker 生效。
+- `max_concurrency: 32` 控制 Pipeline 同时提交的版面块请求数。
+- Ascend 副本入口读取 `PIPELINE_SUBGRAPH_CONCURRENCY`（默认 `16`），生成
+  `/tmp/pipeline-replicas.yaml` 时只替换字面值 `max_concurrency: 16`。当前 YAML
+  使用 `32`，因此用该环境变量调整并发不会改变生成的配置。试跑前核对 worker 实际读取的 YAML。
 - `batch_size: 4096` 是模块批处理配置，不应直接解释为 4096 个并发 HTTP
   请求。
 
@@ -105,14 +107,14 @@ genai_config:
 
 ```yaml
 DocPreprocessor:
-  batch_size: 8
+  batch_size: 32
   use_doc_orientation_classify: True
   use_doc_unwarping: True
 ```
 
 预处理阶段开启：
 
-- 文档方向分类：`PP-LCNet_x1_0_doc_ori`
+- 文档方向分类：`PP-LCNet_x1_0_doc_ori`，子模块批量为 `8`
 - 文档展平/畸变校正：`UVDoc`
 
 这些操作发生在 PP-DocLayoutV3 版面分析之前。

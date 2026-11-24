@@ -23,8 +23,8 @@ for Nginx health. The root lifecycle helper manages all services selected by the
 
 ## Inference-module boundary
 
-This module owns `PaddleOCR-VL-1.6.yaml`, `vllm_config.yaml`, and the VLM
-entrypoints. Root Compose mounts the complete directory read-only at
+This module owns `PaddleOCR-VL-1.6.yaml`, the CUDA VLM configuration template,
+and the inference startup scripts. Root Compose mounts the complete directory read-only at
 `/opt/paddleocr-server` in Pipeline and vLLM containers. `PaddleOCR-VL-1.6.yaml` keeps
 the VLM URL at `http://paddleocr-vlm-server:8118/v1`.
 
@@ -36,9 +36,9 @@ topologies.
 
 - CUDA uses `CUDA_VISIBLE_DEVICES`; the one visible Pipeline device is addressed as
   `gpu:0` inside its container.
-- Ascend uses `ASCEND_RT_VISIBLE_DEVICES` and explicit NPU device mounts. A
-  Pipeline process addresses its visible NPU as `npu:0`. See the
-  [Ascend guide](../../ASCEND.md#推理配置说明) for mappings and privilege settings.
+- The base Ascend services use privileged containers with `ASCEND_RT_VISIBLE_DEVICES`.
+  The replica overlay sets explicit worker device mounts. A Pipeline process addresses
+  its visible NPU as `npu:0`. See the [current mappings](runtime-and-config.md#huawei-ascend).
 - VLM device-list length must equal `VLM_DATA_PARALLEL_SIZE`, and Pipeline/VLM
   physical devices must not overlap.
 

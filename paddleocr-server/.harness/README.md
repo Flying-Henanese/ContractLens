@@ -30,9 +30,8 @@
 ## 事实优先级
 
 版本库中的 Compose、入口脚本和配置模板是本项目可静态核对的事实源；容器内
-PaddleOCR/PaddleX/vLLM 的实际行为还取决于镜像内容。当前镜像标签使用
-`latest-*`，因此历史实机结果只能证明当时的镜像和硬件组合，不能自动证明后来
-拉取的同名镜像仍具有完全相同的行为。
+PaddleOCR/PaddleX/vLLM 的实际行为还取决于镜像内容。PaddleX 和 CUDA vLLM 的默认
+镜像使用 `latest-*`，根 Ascend vLLM 使用版本标签。实机证据需关联当时的镜像 digest 和硬件。
 
 遇到文档、配置和实机结果不一致时，先记录实际启动方式、镜像 ID/digest、
 PaddleOCR/PaddleX/vLLM 版本和目标平台，再判断是文档漂移、镜像变化还是配置

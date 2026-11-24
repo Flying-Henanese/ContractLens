@@ -13,16 +13,27 @@ inference-only references and are not a deployment entry point.
 ### CUDA
 
 - Linux, Docker Compose, NVIDIA drivers and NVIDIA Container Toolkit.
-- The root CUDA template assigns one Pipeline GPU and two VLM GPUs by default.
+- The root CUDA Compose defaults to Pipeline GPU `4` and VLM GPUs `5,6`
+  (DP `2`). `docker/vlm-entrypoint.sh` checks the visible-device count and generates
+  a temporary configuration from `vllm_config.yaml` for `paddleocr genai_server`.
 
 ### Huawei Ascend
 
 - Linux, Docker Compose, Ascend 910B with compatible driver, firmware and
   container runtime.
-- The host must provide the Ascend driver, `npu-smi`, and DCMI mount paths.
-- The root Ascend template assigns Pipeline NPU `7`, VLM NPUs `4,5,6`, data
-  parallel size `3`, and HBM-use parameter `0.3` by default. These are
-  configuration defaults, not proof that the root Ascend stack has run.
+- The host must provide the Ascend driver, `npu-smi`, DCMI mount paths, and local
+  model files under `/data1/models/PaddlePaddle/PaddleOCR-VL`. Compose mounts that
+  model directory read-only at `/models/PaddleOCR-VL`.
+- The base Compose runs both inference services with `privileged: true`. The
+  Pipeline sets `ASCEND_RT_VISIBLE_DEVICES` from `PIPELINE_NPU_ID` (default `7`).
+  vLLM sets it from `VLM_NPU_IDS` (default `4,5,6`), with DP `3` and HBM-use parameter `0.3`.
+- Ascend vLLM uses `quay.io/ascend/vllm-ascend:v0.30.0rc2` and starts `vllm serve`
+  directly. Compose supplies the model path and serving flags. `ASCEND_VLM_IMAGE_TAG`
+  remains in the env template. The effective image is set by `image:` in the root Ascend Compose.
+- Replica workers default to `ASCEND_PRIVILEGED=false`. Their device mount uses
+  `/dev/davinci${PIPELINE_NPU_ID:-7}` while their `ASCEND_RT_VISIBLE_DEVICES` is fixed
+  at `3`. Check which physical device the target runtime exposes before enabling
+  replicas. Changing `PIPELINE_NPU_ID` changes the worker mount only.
 
 ## Configuration layering
 
@@ -31,16 +42,16 @@ inference-only references and are not a deployment entry point.
 2. Root Compose manages the gateway, Pipeline, and VLM in one lifecycle. The
    gateway calls `http://paddleocr-vl-api:8080`; this service runs Nginx when
    Ascend replica mode is selected.
-3. Pipeline and vLLM containers read this directory through the read-only mount
-   at `/opt/paddleocr-server`.
-4. The VLM entrypoint validates its visible-device count and generates a
-   temporary configuration from `vllm_config.yaml`.
-5. `PaddleOCR-VL-1.6.yaml` configures Pipeline behavior and reaches vLLM at
+3. Root Compose mounts this directory read-only at `/opt/paddleocr-server` in
+   the inference containers. PaddleX reads its Pipeline YAML there, and the CUDA
+   VLM entrypoint reads its configuration template there.
+4. `PaddleOCR-VL-1.6.yaml` configures Pipeline behavior and reaches vLLM at
    `http://paddleocr-vlm-server:8118/v1`.
 
 `VLM_NPU_IDS` or `VLM_GPU_IDS` must contain exactly
 `VLM_DATA_PARALLEL_SIZE` devices; the Pipeline device must not overlap with the
-VLM list. Compose parsing cannot validate either hardware condition.
+VLM list. Check the full mapping before starting Ascend, whose direct startup bypasses
+the repository's scripted device-count check. Compose parsing resolves the values only.
 
 ## Operational entry
 

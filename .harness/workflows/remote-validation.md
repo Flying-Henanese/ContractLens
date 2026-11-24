@@ -4,7 +4,9 @@
 
 1. 将 `PDF_PARSER_ENDPOINT` 设置为本次验证的 PaddleX 地址，运行 `uv run pdf-parser health`。
 2. 必要时读取 `/openapi.json`，从去除 Base64 的响应摘要核对 `model_settings` 和印章参数。
-3. 使用 `.harness/scripts/smoke.ps1`，输出只能写入 `output/smoke/`。
+3. 使用 `.harness/scripts/smoke.ps1`，输出只能写入 `output/smoke/`。脚本以 CLI 逐页解析 PDF，
+   默认每次请求超时 180 秒、并发 1。涉及 FastAPI 路由、上传或总超时时，再用真实输入调用
+   `POST /api/v1/documents/parse`，将成功响应存入同一目录并运行相同验证器。
 4. 区分冷启动和预热结果，不把单次性能数据硬编码为客户端事实。
 5. 使用 `validate_result.py` 检查严格烟测质量门槛：JSON 可解析、至少一页、正文非空、页面
    尺寸为正、坐标在页面内且印章引用一致；另外人工或定向脚本检查页数与输入一致及表格 HTML

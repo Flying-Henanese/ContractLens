@@ -7,6 +7,7 @@
 | 任务 | 必读内容 | 执行入口 |
 | --- | --- | --- |
 | 定位模块或理解数据流 | [`architecture/README.md`](architecture/README.md) | `rg`、相关测试 |
+| 核对 PaddleX、vLLM 或硬件配置 | [推理模块 Harness](../paddleocr-server/.harness/README.md) | `bash scripts/docker.sh config` |
 | 修改稳定跨模块行为 | 架构说明及 [`architecture/invariants.md`](architecture/invariants.md) | `scripts/check.ps1` |
 | 实现、修复或重构 | [`workflows/change.md`](workflows/change.md) | `scripts/check.ps1` |
 | 代码评审 | [`workflows/review.md`](workflows/review.md) | 定向测试、`git diff` |

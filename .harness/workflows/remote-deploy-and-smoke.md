@@ -36,9 +36,9 @@
    配置也由只读目录挂载读取，变更后须重启或更新相应容器以重新加载。`uv sync --frozen` 只在
    Dockerfile 的镜像构建阶段执行；T4 宿主机不单独同步 Python 环境。不得用 `pkill`、递归删除或
    临时后台进程替代 Compose 管理。
-7. 确认 `api`、`paddleocr-vl-api`、`paddleocr-vlm-server` 及目标分支配置的其他服务
-   均处于运行且健康状态。任一服务异常时，读取该服务的有限尾部日志后停止部署并报告，
-   不得循环重启：
+7. 确认目标拓扑的全部容器处于运行且健康状态。网关镜像的 healthcheck 请求容器内
+   `/openapi.json`，PaddleX 或代理及 worker 请求 `/health`，vLLM 请求 `/v1/models`。
+   任一服务异常时，读取该服务的有限尾部日志后停止部署并报告，不得循环重启：
 
    ```powershell
    ssh t4 "docker logs --tail 200 <container>"
@@ -46,12 +46,14 @@
 
 8. 检查 `http://192.168.0.67:8888/openapi.json` 和
    `http://192.168.0.67:8880/health`。
-9. 从本地显式选择已确认的 PaddleX 宿主机端点，再运行烟测脚本。脚本将结果写入
-   `output/smoke/` 并调用 `validate_result.py`：
+9. 从本地显式选择已确认的 PaddleX 宿主机端点，再运行烟测脚本。脚本通过 CLI 解析 PDF，
+   将结果写入 `output/smoke/` 并调用 `validate_result.py`：
 
    ```powershell
    $env:PDF_PARSER_ENDPOINT = "http://192.168.0.67:8880"
    & .\.harness\scripts\smoke.ps1 -InputPdf "resources\...\sample.pdf"
    ```
+
+   FastAPI 上传、路由和 HTTP 输出的验证见 [真实验证流程](remote-validation.md)。
 
 日志和报告不得包含私钥、PDF Base64、Markdown 图片 Base64、完整远端响应或敏感正文。

@@ -32,9 +32,11 @@ host launcher to operate the product.
 
 - `../compose.yaml`, `../compose.ascend.yaml`: supported production orchestration.
 - `PaddleOCR-VL-1.6.yaml`: Pipeline topology and features.
-- `vllm_config.yaml`: vLLM data-parallel template.
-- `docker/vlm-entrypoint*.sh`: validates device count and writes temporary runtime
-  configuration.
+- `vllm_config.yaml`, `docker/vlm-entrypoint.sh`: CUDA vLLM runtime template and
+  startup script with a device-count check.
+- `../compose.ascend.yaml`: starts Ascend vLLM directly with model mount and CLI flags.
+- `docker/vlm-entrypoint-ascend.sh`: retained startup script for the imported
+  inference-only Ascend Compose.
 - `compose.yaml`, `compose.ascend.yaml`, `start_vl.sh`: imported historical
   inference-only references, not production entry points.
 

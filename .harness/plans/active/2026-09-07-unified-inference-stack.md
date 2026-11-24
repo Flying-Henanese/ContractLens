@@ -2,7 +2,7 @@
 status: active
 owner: Codex
 created: 2026-09-07
-updated: 2026-11-21
+updated: 2026-11-24
 scope:
   - repository-layout
   - gateway-module
@@ -85,13 +85,15 @@ pin images, or restrict raw inference ports. The imported provider's existing
 host ports remain available pending target-server verification. Those deferred
 items are the later stages of this plan, not completed architecture facts.
 
-As of 2026-11-21, the current deployment and gateway behavior are recorded in
+The current deployment and gateway behavior are recorded in
 the [architecture](../../architecture/README.md). The current branch also has
 an opt-in Ascend Nginx overlay with two or four Pipeline workers. The
 [Ascend implementation record](../archive/2026-11-13-ascend-pipeline-replicas.md)
 covers static verification. Use `PDF_PARSER_ENDPOINT` to select a standalone
 provider. The gateway still has the historical fallback URL unless that setting
-is supplied, whereas root Compose sets the internal service DNS.
+is supplied, whereas root Compose sets the internal service DNS. See the
+[current platform startup paths](../../../paddleocr-server/.harness/context/runtime-and-config.md)
+for CUDA and Ascend vLLM.
 
 ## Target architecture
 
@@ -242,8 +244,8 @@ The gateway preserves fail-fast semantics and maps errors consistently:
 | Normalization/contract violation after provider success | 502 | no |
 
 The total document deadline is authoritative.  Every retry receives only the
-remaining time budget, so a nominal per-attempt timeout cannot extend a
-300-second request indefinitely.  No retry may return a mixture of pages from
+remaining time budget, so a nominal per-attempt timeout cannot extend the
+document deadline indefinitely. No retry may return a mixture of pages from
 different attempts.
 
 ## Contract ownership and compatibility
@@ -455,6 +457,8 @@ part of rollback. There is no persistent application data migration to reverse.
   and `scripts/docker.sh`, distinguish historical two-service evidence from the
   unverified root Ascend topology, and retain the original inference files only
   as configuration references.
+- 2026-11-24: Reconciled current-branch documentation with the direct Ascend
+  `vllm serve` startup and the gateway's 600-second document parsing timeout.
 
 ## Unexpected findings
 

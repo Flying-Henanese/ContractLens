@@ -12,8 +12,8 @@
 3. 统一 Compose 中，网关只能通过 `http://paddleocr-vl-api:8080` 调用 PaddleX Pipeline，不得
    直接调用 vLLM、宿主机端口或历史远端 IP。独立运行网关时才通过 `PDF_PARSER_ENDPOINT` 明确指定
    可访问的 PaddleX 地址。
-4. 根 Compose 和 overlay 负责设备映射及推理容器编排。Pipeline 和 vLLM 从只读挂载的
-   `paddleocr-server/` 读取其入口和配置，网关模块不得复制或改变这些配置。
+4. 根 Compose 和 overlay 负责设备映射及推理容器编排。推理模块持有 Pipeline YAML 和
+   平台相关启动配置，根 Compose 通过只读挂载或服务启动参数提供这些配置，网关模块不得复制或改变它们。
 
 ## 输入、编排与失败
 

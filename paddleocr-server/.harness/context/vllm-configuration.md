@@ -1,7 +1,8 @@
 # vLLM Configuration
 
-本文件记录 `vllm_config.yaml` 和运行时入口脚本中的 vLLM 配置。模板及入口脚本
-是运行时事实源；修改后应同步更新本文件和环境变量示例。
+CUDA 从 `vllm_config.yaml` 和入口脚本生成运行时配置。根 Ascend 使用 Compose 中的
+`vllm serve` 命令行参数，详见 [运行配置](runtime-and-config.md#huawei-ascend)。以下 YAML
+片段是模板初值，根 Compose 可按平台选择生效值。
 
 ## 模型与并行方式
 
@@ -18,8 +19,8 @@ data-parallel-backend: mp
 Pipeline 只配置一个 vLLM API 地址。vLLM 在该入口后调度多个 DP rank，不需要
 额外的反向代理或手工维护多个服务地址。
 
-运行时的 `data-parallel-size` 会被 `VLM_DATA_PARALLEL_SIZE` 覆盖。设备列表
-数量必须与模型实例数一致。
+运行时的 `data-parallel-size` 由 `VLM_DATA_PARALLEL_SIZE` 提供，根 Compose 默认
+CUDA 为 `2`，Ascend 为 `3`。设备列表数量必须与模型实例数一致。
 
 ## 显存与调度
 
@@ -50,12 +51,11 @@ trust-remote-code: true
 - PaddleOCR-VL 需要加载模型仓库中的自定义实现，因此启用
   `trust-remote-code`。
 
-CUDA Graph 默认保持启用。只有遇到显存或 CUDA Graph 兼容性问题时才考虑
-启用 `enforce-eager`。
+CUDA 模板保留图执行的运行时默认值。Ascend 的图模式以命令行和实际启动日志为准。
 
 ## 环境变量覆盖
 
-入口脚本支持：
+根 CUDA 入口脚本和根 Ascend Compose 使用：
 
 ```text
 VLM_MODEL
@@ -66,20 +66,21 @@ VLM_MAX_NUM_SEQS
 VLM_MAX_NUM_BATCHED_TOKENS
 ```
 
-CUDA 使用 `VLM_GPU_IDS`，昇腾使用 `VLM_NPU_IDS`。入口脚本会拒绝以下配置：
+CUDA 使用 `VLM_GPU_IDS`，昇腾使用 `VLM_NPU_IDS`。CUDA 入口脚本会拒绝以下配置：
 
 - 数据并行大小不是正整数。
 - 并行后端不是 `mp` 或 `ray`。
 - 可见设备数量与数据并行实例数不一致。
 
-这些检查发生在容器启动时；`docker compose config` 只做 Compose 解析，不执行
-entrypoint，因此数量不一致的配置仍可能通过静态 Compose 检查。
+CUDA 入口在容器启动时执行这些检查。根 Ascend 直接启动 vLLM，`VLM_MODEL` 用于
+`--served-model-name`，本地权重路径由 Compose 的挂载和命令行决定。两平台的静态
+Compose 解析均需配合部署前设备预检。
 
 ## 设备隔离
 
 - Pipeline GPU/NPU 与 VLM GPU/NPU 按部署约束应当分离。
 - CUDA 通过 `CUDA_VISIBLE_DEVICES` 暴露物理 GPU。
-- 昇腾通过 `ASCEND_RT_VISIBLE_DEVICES` 暴露物理 NPU。
+- 昇腾通过 `ASCEND_RT_VISIBLE_DEVICES` 选择可见 NPU，副本的显式设备挂载与可见编号需在实机核对。
 - 容器内设备会重新编号，Pipeline 使用 `gpu:0` 或 `npu:0` 是预期行为。
 - `start_vl.sh` 会检查 CUDA 设备重叠；CUDA 和昇腾 Compose 当前不会交叉比较
   Pipeline 与 VLM 设备列表，需由部署者预检。

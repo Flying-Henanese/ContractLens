@@ -5,10 +5,12 @@
 根目录 `src/pdf_parser/` 是业务网关，`paddleocr-server/` 是独立维护推理运行时的配置模块。
 两者各有 Python 依赖和运行职责，由根目录 Compose 作为一套服务管理。
 
-`POST /api/v1/documents/parse` 同步解析 PDF 或受支持的图像，解析等待上限为 600 秒；
-`POST /api/v1/receipts/recognize` 是预留路由，接受支持的上传类型后返回 HTTP 501。
-CLI 的 `parse` 命令处理 PDF。网关在 Compose 网络内通过
-`http://paddleocr-vl-api:8080` 请求 PaddleX。
+`POST /api/v1/documents/parse` 同步解析 PDF 或受支持的图像。上传暂存和初步校验完成后，
+路由以 `DOCUMENT_TIMEOUT_SECONDS` 为解析等待和 PaddleX 客户端超时配置，当前为 600 秒。
+解析等待超时返回 HTTP 504。`PDF_PARSER_TIMEOUT_SECONDS` 配置独立 CLI 的默认单次请求超时
+（默认 120 秒，可由 `--timeout` 覆盖）。`POST /api/v1/receipts/recognize` 校验扩展名和
+Content-Type 后返回 HTTP 501，120 秒是预留配置。CLI 的 `parse` 命令处理 PDF。网关在
+Compose 网络内通过 `http://paddleocr-vl-api:8080` 请求 PaddleX。
 
 PDF 的 HTTP 提交粒度由路由决定。`/api/v1/documents/parse` 和 CLI 采用逐页请求，
 `/api/v1/documents/parse-whole` 提交原始完整 PDF，`/api/v1/documents/parse-split` 将 PDF 划分为
@@ -21,9 +23,10 @@ PDF 的 HTTP 提交粒度由路由决定。`/api/v1/documents/parse` 和 CLI 采
             -> paddleocr-vlm-server（PaddleOCR-VL / vLLM）
 ```
 
-`API_PORT` 和 CUDA 的 `VLM_PORT` 用于宿主机诊断。Pipeline 和 vLLM 容器将
-`./paddleocr-server` 只读挂载到 `/opt/paddleocr-server`。副本模式的 Nginx 容器
-单独挂载代理配置模板。
+`PDF_PARSER_PORT`、`API_PORT` 分别控制宿主机的业务网关和 PaddleX 端口，默认 `8888` 和
+`8880`。CUDA 另发布 vLLM 诊断端口 `VLM_PORT`（默认 `8118`），Ascend 的 `8118` 只在
+Compose 网络内使用。Pipeline 和 vLLM 容器将 `./paddleocr-server` 只读挂载到
+`/opt/paddleocr-server`。副本模式的 Nginx 容器单独挂载代理配置模板。
 
 ```text
 逐页入口的 PDF
@@ -50,15 +53,16 @@ PDF 的 HTTP 提交粒度由路由决定。`/api/v1/documents/parse` 和 CLI 采
 ## Compose 拓扑
 
 - CUDA 和 Ascend 默认均为单 Pipeline。网关等待 `paddleocr-vl-api` 健康，Pipeline 等待
-  vLLM 健康。根 Compose 分别使用 `compose.yaml` 和 `compose.ascend.yaml`。
+  vLLM 健康。根 Compose 分别使用 `compose.yaml` 和 `compose.ascend.yaml`。两平台的
+  [vLLM 启动路径和设备要求](../../paddleocr-server/.harness/context/runtime-and-config.md)各自维护。
 - Ascend 可在调用 `scripts/docker.sh` 时设置环境变量 `CONTRACTLENS_PIPELINE_MODE=replicas`，
   通过 `CONTRACTLENS_PIPELINE_WORKERS=2` 或 `4` 选择副本数。Overlay 将
   `paddleocr-vl-api` 替换为 Nginx，Nginx 等待所有 Pipeline worker 健康，再为请求做
-  `least_conn` 分发。各 worker 共享 Pipeline NPU 与一个 vLLM 服务。网关使用原服务名和协议。
-- 当前分支的 Ascend 拓扑已完成静态解析，目标 NPU 上的启动、并发容量和真实解析见
-  [Ascend 验收步骤](../../paddleocr-server/ASCEND.md#多-pipeline-静态适配)。
+  `least_conn` 分发。各 worker 共享 Pipeline 设备配置与一个 vLLM 服务。网关沿用原服务名和协议。
+- Ascend 的启动、设备映射、并发容量和真实解析仍需目标主机验证。见
+  [推理验证清单](../../paddleocr-server/.harness/checklists/verification.md)。
 
-正文回退、普通元素/印章坐标和印章去重能力等稳定行为只在 [`invariants.md`](invariants.md)
+正文回退、普通元素/印章坐标和印章绑定等稳定行为只在 [`invariants.md`](invariants.md)
 定义，本页不复制规则细节。
 
 ## 模块职责

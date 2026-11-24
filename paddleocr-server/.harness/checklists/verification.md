@@ -46,7 +46,9 @@ curl --fail http://127.0.0.1:8880/health
 ```
 
 - VLM 的 `/v1/models` 正常。
-- ContractLens 网关、PaddleX Pipeline 和 VLM 服务均健康。使用副本模式时，确认代理和全部 worker 健康。
+- 网关、PaddleX 与 VLM 的容器 healthcheck 为 `healthy`。使用副本模式时，
+  确认代理和全部 worker 健康，并核对实际 NPU 映射和生成的 `/tmp/pipeline-replicas.yaml`。
+- Ascend vLLM 的 `8118` 在容器内检查，启动日志应显示实际加载的本地模型和预期的 DP rank。
 - 分配的每张 GPU/NPU 加载了预期模型。
 - 多实例场景下设备均能产生推理负载。
 - `/layout-parsing` 对真实 PDF 或图片返回成功结果。

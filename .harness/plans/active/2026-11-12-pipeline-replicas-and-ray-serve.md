@@ -2,7 +2,7 @@
 status: active
 owner: Codex
 created: 2026-11-12
-updated: 2026-11-21
+updated: 2026-11-24
 scope:
   - paddleocr-server
   - compose-runtime
@@ -32,7 +32,7 @@ blocked_by: []
 - vLLM DP 主线程出现 `all_reduce` 与 dummy batch。栈驻留比例不等于通信成本或可消除的延迟，不预先判定 DP=4 是瓶颈。
 - 曾发生 FlexAttention / Dynamo `recompile_limit` 异常，导致引擎退出并自动重启。必须先建立无崩溃的可重复基线；若运行环境已有补丁，记录其内容和生效值，不能把稳定性修复收益混入副本扩容收益。
 - 现有单页简单样本的耗时不能代表整本书。既有书籍试跑因崩溃中断，不能作为完整吞吐结果。
-- 本地与远端此前分支、Compose 文件不同；本地 `compose.ascend.yaml` 有用户改动。实施前重新检查，不覆盖无关改动，不直接把本地整个目录复制到远端。
+- 本地与远端此前使用了不同分支和 Compose 文件。实施前重新检查两边的分支、工作区和配置，不直接把本地整个目录复制到远端。
 - 网关协议、归一化、页序、坐标与 fail-fast 契约保持。任一文档页失败不得形成伪成功的整份文档结果；压测可以分别记录单页请求失败。
 - 本计划拟替代的是“仅一个 Pipeline 进程”的部署拓扑，不替代模块边界及统一 Compose 生命周期。阶段一由 Nginx 提供 `paddleocr-vl-api:8080`，实际 PaddleX 服务命名为 `pipeline-1`、`pipeline-2`；后续评估 Ray 时保持该兼容入口。Nginx 作为推理模块内部入口，不承载网关业务逻辑。
 - 与 [整份 PDF 提交计划](2026-07-28-whole-document-submission.md) 的输入粒度目标不同；本实验明确采用逐页请求，不同时实施该计划。与 [统一推理栈计划](2026-09-07-unified-inference-stack.md) 协调，继续使用根 Compose 管理整套服务。
