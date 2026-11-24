@@ -11,6 +11,7 @@ Compose 同时编排本项目的 FastAPI 网关、PaddleX Pipeline 和 PaddleOCR
 ## 已实现
 
 - 将 PDF 逐页拆分后调用 PaddleX，按本地页码组装文档结果。
+- HTTP API 提供整份提交和最多四段并发提交两种 PDF 解析入口，便于用同一份文件对照吞吐。
 - 支持请求超时、网络失败重试和受控并发。
 - 将 PaddleX `prunedResult` 转换为与现有样例相近的 JSON。
 - 输出正文、版面类型、边界框、阅读顺序、OCR/印章文本和处理耗时。
@@ -61,6 +62,10 @@ CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
 Python 测试和脚本语法检查，之后再在目标服务器完成 Compose 和真实解析烟测。
 
 ## 使用
+
+HTTP 客户端可继续调用 `/api/v1/documents/parse`，或切换到 `/api/v1/documents/parse-whole`
+和 `/api/v1/documents/parse-split`。三个入口都使用同一个 `file` 上传字段和结果结构。
+见 [HTTP 接口与对照方法](docs/api.md#文档解析)。
 
 检查服务：
 

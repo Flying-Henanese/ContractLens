@@ -5,11 +5,14 @@
 根目录 `src/pdf_parser/` 是业务网关，`paddleocr-server/` 是独立维护推理运行时的配置模块。
 两者各有 Python 依赖和运行职责，由根目录 Compose 作为一套服务管理。
 
-`POST /api/v1/documents/parse` 同步解析 PDF 或受支持的图像，解析等待上限为 300 秒；
+`POST /api/v1/documents/parse` 同步解析 PDF 或受支持的图像，解析等待上限为 600 秒；
 `POST /api/v1/receipts/recognize` 是预留路由，接受支持的上传类型后返回 HTTP 501。
 CLI 的 `parse` 命令处理 PDF。网关在 Compose 网络内通过
-`http://paddleocr-vl-api:8080` 请求 PaddleX。PDF 采用逐页请求，整份提交见
-[实施计划](../plans/active/2026-07-28-whole-document-submission.md)。
+`http://paddleocr-vl-api:8080` 请求 PaddleX。
+
+PDF 的 HTTP 提交粒度由路由决定。`/api/v1/documents/parse` 和 CLI 采用逐页请求，
+`/api/v1/documents/parse-whole` 提交原始完整 PDF，`/api/v1/documents/parse-split` 将 PDF 划分为
+最多四个连续非空分段并发提交。整份和分段请求校验远端页数，再按原文页号归一化和合并。
 
 ```text
 外部调用方
@@ -23,8 +26,8 @@ CLI 的 `parse` 命令处理 PDF。网关在 Compose 网络内通过
 单独挂载代理配置模板。
 
 ```text
-本地 PDF
-  -> service.py::_count_pages：读取 PDF，校验输入并取得总页数
+逐页入口的 PDF
+  -> ingestion/pdf.py::count_pdf_pages：读取 PDF，校验输入并取得总页数
   -> ingestion/pdf.py：再次读取和校验，再拆成带 1-based 页码的单页 PDF
   -> service.py：按 Settings.concurrency 有界分批
   -> clients/paddlex.py：每页 POST /layout-parsing，要求恰好返回一页
@@ -66,9 +69,9 @@ CLI 的 `parse` 命令处理 PDF。网关在 Compose 网络内通过
 | CLI 参数、输出路径、终端消息 | `src/pdf_parser/cli.py` | `tests/test_cli.py` |
 | 环境变量、地址、超时、重试、并发和代理 | `src/pdf_parser/config.py` | 配置或客户端测试 |
 | `/health`、PDF/图像请求体、重试和响应协议 | `src/pdf_parser/clients/paddlex.py` | `tests/test_client.py`、`tests/test_image_input.py` |
-| PDF 再校验和逐页拆分 | `src/pdf_parser/ingestion/pdf.py` | `tests/test_ingestion.py` |
+| PDF 校验、整份读取和按页分段 | `src/pdf_parser/ingestion/pdf.py` | `tests/test_ingestion.py`、`tests/test_multipage_api.py` |
 | 图像签名识别 | `src/pdf_parser/ingestion/image.py` | `tests/test_image_input.py` |
-| PDF 计数/批次与图像单页编排、失败策略和页序 | `src/pdf_parser/service.py` | `tests/test_service.py`、`tests/test_image_input.py` |
+| PDF 逐页、整份、分段编排，图像单页编排和失败策略 | `src/pdf_parser/service.py` | `tests/test_service.py`、`tests/test_multipage_api.py`、`tests/test_image_input.py` |
 | 标签、阅读顺序和分阶段 OCR/Markdown 回退 | `src/pdf_parser/normalization/paddlex.py` | `tests/test_normalization.py` |
 | 印章逐项绑定、坐标、编号和引用 | `src/pdf_parser/normalization/seal.py` | `tests/test_normalization.py` |
 | 跨页表格候选检测 | `src/pdf_parser/cross_page_tables.py` | `tests/test_cross_page_tables.py` |

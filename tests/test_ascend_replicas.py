@@ -38,13 +38,19 @@ def test_resolved_ascend_replicas(workers):
     assert not proxy.get("privileged")
     assert not proxy.get("command")
     assert len(proxy["depends_on"]) == workers
+    template = next(
+        Path(volume["source"])
+        for volume in proxy["volumes"]
+        if volume["target"] == "/etc/nginx/templates/default.conf.template"
+    )
+    assert "client_max_body_size 256m;" in template.read_text(encoding="utf-8")
     assert services["api"]["environment"]["PDF_PARSER_ENDPOINT"] == "http://paddleocr-vl-api:8080"
     for index in range(1, workers + 1):
         worker = services[f"pipeline-{index}"]
         assert "latest-huawei-npu" in worker["image"]
         assert "CUDA_VISIBLE_DEVICES" not in worker["environment"]
         assert not worker.get("ports")
-        assert worker["environment"]["ASCEND_RT_VISIBLE_DEVICES"] == "7"
+        assert worker["environment"]["ASCEND_RT_VISIBLE_DEVICES"] == "3"
         assert any(
             (device["source"] if isinstance(device, dict) else device.split(":")[0])
             == "/dev/davinci7"

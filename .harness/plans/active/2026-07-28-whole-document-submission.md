@@ -2,7 +2,7 @@
 status: active
 owner: Codex
 created: 2026-07-28
-updated: 2026-08-12
+updated: 2026-11-24
 scope:
   - ingestion
   - client
@@ -18,7 +18,7 @@ blocked_by: []
 状态：active  
 负责人：Codex  
 创建日期：2026-07-28  
-最后更新：2026-08-12 +08:00
+最后更新：2026-11-24 +08:00
 
 ## 目标与用户价值
 
@@ -65,6 +65,9 @@ blocked_by: []
 - 2026-08-12 — Harness 对齐复核确认目标仍未落地：当前实现、测试、CLI 和烟测脚本仍使用
   逐页拆分、页级请求和 `concurrency`。本次只更新事实日期，不宣称有实施进度，也不代替用户
   取消该目标。
+- 2026-11-24 — 新增整份提交 `/parse-whole` 和四段并发 `/parse-split` 用于现场对照。
+  原 `/parse`、CLI 和烟测脚本继续逐页提交，默认入口迁移以实测决定。见
+  [多页入口实施记录](../archive/2026-11-24-multipage-endpoints.md)。
 
 ## 意外发现
 

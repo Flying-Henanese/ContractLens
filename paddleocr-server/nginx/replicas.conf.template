@@ -10,7 +10,7 @@ upstream pipeline_workers {
 }
 server {
     listen 8080;
-    client_max_body_size 64m;
+    client_max_body_size 256m;
     client_body_buffer_size 128k;
     client_body_temp_path /var/cache/nginx/client_temp;
     access_log /dev/stdout pipeline_json;
