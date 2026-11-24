@@ -21,13 +21,16 @@ layout_prep_cpu_workers: 16
   CPU 线程池；不支持它的版本会忽略该字段。本项目使用 `latest-*` 镜像，必须
   在目标镜像中确认 PaddleX 版本和该字段是否生效。
 
-当前 API 使用普通 `paddlex --serve`，不是高性能多 worker Serving。本设计中的
-输入、CV、VLM 队列描述单次 Pipeline 调用内部的阶段重叠，不表示多个完整
-`/layout-parsing` 请求会在服务端并行执行；当前普通服务契约一次处理一个请求。
+当前 API 使用普通 `paddlex --serve`。`use_queues` 管理单次 Pipeline 调用内的
+输入、CV 和 VLM 三个阶段。单个进程能否并行处理多个 `/layout-parsing` 请求
+取决于目标镜像中的 Serving 实现。
 
-`use_queues` 用于开启 PaddleOCR-VL Pipeline 内部的队列化流水线，使输入、CV
-和 VLM 三个阶段通过队列传递中间结果。它解决的是单个 Pipeline 内不同处理
-阶段之间的重叠执行问题。
+开启队列后，一份多页 PDF 就可以让两个推理阶段重叠。CV 线程把第一批页面及版面框
+放入 `queue_cv` 后，可以继续处理下一批页面，VLM 线程同时将上一批已准备好的
+版面块发给 vLLM。关闭队列后，单次调用先完成当前批的 CV，再等待该批 VLM
+识别完成，然后进入下一批。多个 PaddleX worker 可以独立推进，所以 `parse-split`
+的不同分段即使关闭队列，也可能分别处于 CV 和 VLM 阶段。
+[PaddleX release/3.7 流水线源码](https://github.com/PaddlePaddle/PaddleX/blob/release/3.7/paddlex/inference/pipelines/paddleocr_vl/pipeline.py#L983-L1122)
 
 在支持该字段的 PaddleX 中，`layout_prep_cpu_workers` 控制 VLM 请求发出前的
 页面级 CPU 准备并发，包括版面块裁剪、合并、过滤和请求构造。它不控制
@@ -148,6 +151,10 @@ VLM 请求准备；worker 数不会超过参与该批次的页面数。旧版本
 - vLLM 排队或模型推理。
 
 ### 延迟和内存上升
+
+评估 PaddleX 和 vLLM 共卡时，两个进程的推理可能重叠并争用算力。vLLM 即使暂时
+没有请求，模型权重和已分配的 KV cache 仍会占用 HBM。做容量评估时，记录多页
+请求下的整卡 HBM 峰值，并结合 CV 阶段耗时和 vLLM 排队判断是否发生争用。
 
 高并发会增加在途页面、图片、版面框和 VLM 请求数量。出现 OOM、HBM OOM、
 超时或尾延迟显著上升时，应联合降低：

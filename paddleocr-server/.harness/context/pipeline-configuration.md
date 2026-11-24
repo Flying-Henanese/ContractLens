@@ -13,7 +13,9 @@ layout_prep_cpu_workers: 16
 ```
 
 - `batch_size: 64`：Pipeline 顶层批处理配置。
-- `use_queues: True`：启用输入、CV 和 VLM 阶段之间的内部队列流水线。
+- `use_queues: True` 允许单次 Pipeline 调用中的页面批次交叠。vLLM 识别上一批页面的
+  版面块时，PaddleX 可以继续对下一批页面做预处理和版面检测。设为 `False` 时，
+  单次调用会等当前批次的 CV 和 VLM 都完成后再处理下一批。
 - `layout_prep_cpu_workers: 16`：这是运行时版本依赖项。支持该字段的 PaddleX
   以页面为任务并行完成过滤、裁剪、合并和 VLM 输入构造，实际 worker 数不超过
   当前页面数；不支持该字段的版本会忽略它。
@@ -22,8 +24,8 @@ layout_prep_cpu_workers: 16
 PaddleX 实现。启动目标镜像后应记录 PaddleX 版本，并通过源码、日志或性能指标
 确认 `layout_prep_cpu_workers` 是否生效。不要把 YAML 中存在该字段作为生效证据。
 
-`use_queues` 和 CPU 准备阶段的详细设计见
-`../designs/2026-07-25-use-queues-pipeline.md`。
+队列行为、多个 worker 的并发以及共卡时的 HBM 影响见
+[流水线设计](../designs/2026-07-25-use-queues-pipeline.md)。
 
 ## 功能开关
 
