@@ -9,8 +9,11 @@
 
 网关代码不承载模型推理：文档 API 当前接受 PDF 或受支持图像；CLI 仍只接受 PDF。根目录
 Compose 同时启动网关、`paddleocr-server/` 中的 PaddleX Pipeline 和其 vLLM 进程，网关通过
-Compose 服务 DNS `http://paddleocr-vl-api:8080` 请求 Pipeline。PDF 仍采用逐页远端请求，整份
-PDF 提交是 active plan 中尚未落地的目标状态。
+Compose 服务 DNS `http://paddleocr-vl-api:8080` 请求 Pipeline。
+
+`/api/v1/documents/parse` 和 CLI 逐页提交 PDF，`/api/v1/documents/parse-whole` 提交原始
+PDF，`/api/v1/documents/parse-split` 并发提交最多四个连续分段。三个 HTTP 入口等待解析的
+上限均为 600 秒。整份和分段请求校验返回页数，再按原文页号归一化和合并。
 
 ```text
 外部调用方
@@ -24,8 +27,8 @@ PDF 提交是 active plan 中尚未落地的目标状态。
 `/opt/paddleocr-server`，因此入口脚本与 Pipeline 配置始终来自导入模块，而不是网关镜像。
 
 ```text
-本地 PDF
-  -> service.py::_count_pages：读取 PDF，校验加密/空/损坏并取得总页数
+逐页入口的 PDF
+  -> ingestion/pdf.py::count_pdf_pages：校验 PDF 并取得总页数
   -> ingestion/pdf.py：再次读取和校验，再拆成带 1-based 页码的单页 PDF
   -> service.py：按 Settings.concurrency 有界分批
   -> clients/paddlex.py：每页 POST /layout-parsing，要求恰好返回一页
@@ -57,13 +60,13 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 
 | 关注点 | 权威模块 | 对应离线测试 |
 | --- | --- | --- |
-| FastAPI 的 PDF/图像上传、同步路由、超时和 HTTP 错误 | `src/pdf_parser/api.py` | `tests/test_api.py`、`tests/test_api_timeout.py` |
+| FastAPI 的 PDF/图像上传、同步路由、超时和 HTTP 错误 | `src/pdf_parser/api.py` | `tests/test_api.py`、`tests/test_api_timeout.py`、`tests/test_multipage_api.py` |
 | CLI 参数、输出路径、终端消息 | `src/pdf_parser/cli.py` | `tests/test_cli.py` |
 | 环境变量、地址、超时、重试、并发和代理 | `src/pdf_parser/config.py` | 配置或客户端测试 |
 | `/health`、PDF/图像请求体、重试和响应协议 | `src/pdf_parser/clients/paddlex.py` | `tests/test_client.py`、`tests/test_image_input.py` |
-| PDF 再校验和逐页拆分 | `src/pdf_parser/ingestion/pdf.py` | `tests/test_ingestion.py` |
+| PDF 校验、整份读取和按页分段 | `src/pdf_parser/ingestion/pdf.py` | `tests/test_ingestion.py`、`tests/test_multipage_api.py` |
 | 图像签名识别 | `src/pdf_parser/ingestion/image.py` | `tests/test_image_input.py` |
-| PDF 计数/批次与图像单页编排、失败策略和页序 | `src/pdf_parser/service.py` | `tests/test_service.py`、`tests/test_image_input.py` |
+| PDF 逐页、整份、分段编排，图像单页编排和失败策略 | `src/pdf_parser/service.py` | `tests/test_service.py`、`tests/test_multipage_api.py`、`tests/test_image_input.py` |
 | 标签、阅读顺序和分阶段 OCR/Markdown 回退 | `src/pdf_parser/normalization/paddlex.py` | `tests/test_normalization.py` |
 | 印章逐项绑定、坐标、编号和引用 | `src/pdf_parser/normalization/seal.py` | `tests/test_normalization.py` |
 | 跨页表格候选检测 | `src/pdf_parser/cross_page_tables.py` | `tests/test_cross_page_tables.py` |
@@ -79,8 +82,8 @@ Pipeline 等待 vLLM 健康，三个进程由根 `compose.yaml`（CUDA）或 `co
 T4 当前验证方案由根 Compose 的 CUDA overlay 提供：Nginx 替代内部
 `paddleocr-vl-api` 服务入口，`pipeline-1` 至 `pipeline-4` 启动 4 个独立 Pipeline，
 共享单一 vLLM 服务。T4 实测将 4 个 Pipeline 放在 GPU 1，vLLM 配为 TP=1、DP=4，
-使用 GPU 2/3/4/5。网关仍按单页调用 Pipeline，HTTP 边界、文档 fail-fast 和模块职责
-不变。具体部署命令、参数、吞吐和超时结论见 [README 的 T4 配置说明](../../README.md)
+使用 GPU 2/3/4/5。Nginx 按 HTTP 请求分发，逐页入口一次分发一页，整份入口一次分发一个
+文档，分段入口对每个分段独立分发。具体部署命令、参数、吞吐和超时结论见 [README 的 T4 配置说明](../../README.md)
 与[基准报告](../reports/benchmarks/2026-11-13-t4-pipeline-replicas.md)。
 
 这是 CUDA 显式选择的运行模式，不改变默认单 Pipeline Compose，也不适用于 Ascend。

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Annotated, Literal
@@ -13,9 +14,9 @@ from pdf_parser.config import Settings
 from pdf_parser.errors import InvalidImageError, InvalidPdfError, PaddleXError
 from pdf_parser.ingestion.image import detect_image_format
 from pdf_parser.models import ParseResponse
-from pdf_parser.service import parse_image, parse_pdf
+from pdf_parser.service import parse_image, parse_pdf, parse_pdf_split, parse_pdf_whole
 
-DOCUMENT_TIMEOUT_SECONDS = 300.0
+DOCUMENT_TIMEOUT_SECONDS = 600.0
 RECEIPT_TIMEOUT_SECONDS = 120.0
 
 _DOCUMENT_PDF_SUFFIXES = {".pdf"}
@@ -49,7 +50,35 @@ app.state.receipt_timeout_seconds = RECEIPT_TIMEOUT_SECONDS
 def parse_document(
     file: Annotated[UploadFile, File(description="需要解析的 PDF 或图像文件")],
 ) -> ParseResponse:
-    """同步等待文档解析完成，最长等待 300 秒。"""
+    """逐页提交 PDF，或解析单张图像。"""
+    return _parse_document(file, parse_pdf)
+
+
+@app.post(
+    "/api/v1/documents/parse-whole",
+    response_model=ParseResponse,
+    summary="整份提交 PDF 或同步解析图像",
+)
+def parse_document_whole(
+    file: Annotated[UploadFile, File(description="需要解析的 PDF 或图像文件")],
+) -> ParseResponse:
+    return _parse_document(file, parse_pdf_whole)
+
+
+@app.post(
+    "/api/v1/documents/parse-split",
+    response_model=ParseResponse,
+    summary="并发解析最多四段 PDF 或同步解析图像",
+)
+def parse_document_split(
+    file: Annotated[UploadFile, File(description="需要解析的 PDF 或图像文件")],
+) -> ParseResponse:
+    return _parse_document(file, parse_pdf_split)
+
+
+def _parse_document(
+    file: UploadFile, pdf_parser: Callable[[Path, Settings], Awaitable[ParseResponse]]
+) -> ParseResponse:
     input_kind = _validate_document_upload(file)
 
     with TemporaryDirectory(prefix="pdf-parser-document-") as temp_dir:
@@ -67,7 +96,7 @@ def parse_document(
 
         settings = Settings(timeout_seconds=DOCUMENT_TIMEOUT_SECONDS)
         parser = (
-            parse_pdf(input_path, settings=settings)
+            pdf_parser(input_path, settings)
             if input_kind == "pdf"
             else parse_image(input_path, settings=settings)
         )

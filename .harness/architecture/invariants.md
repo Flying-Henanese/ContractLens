@@ -17,13 +17,13 @@
 
 ## 输入、编排与失败
 
-1. PDF 输入必须在本地校验；加密、空或损坏 PDF 抛出 `InvalidPdfError`。当前
-   `service.py::_count_pages()` 和 `ingestion/pdf.py::iter_pdf_pages()` 都会读取并校验文件。
+1. PDF 输入必须在本地校验；无法以空密码解密、无页面或读取时报错时抛出 `InvalidPdfError`。
+   `ingestion/pdf.py` 提供页数、原始文件字节和按页切分能力。
 2. 图像文档只接受 BMP、JPEG、PNG、TIFF 和 WEBP；API 同时校验扩展名、Content-Type 和
    二进制签名，`service.py::parse_image()` 会再次读取并校验签名，失败抛出 `InvalidImageError`。
 3. 页码从 1 开始，最终输出按 `page_num` 排序且页码唯一；图像固定归一化为第 1 页。
-4. 每个单页 PDF 或图像远端请求必须恰好返回一个 `layoutParsingResults` 条目；服务为每个本地页生成一个
-   归一化页面，因此最终页数与本地页数一致。
+4. 每个 PDF 远端请求返回的 `layoutParsingResults` 条目数量必须等于本次提交的页数，
+   图像请求必须恰好返回一个条目。服务按原文页号生成每页结果及其引用。
 5. 当前采用 fail-fast：任一输入、远端或归一化失败导致整份文档失败，不写伪成功结果。
 
 ## PaddleX 边界

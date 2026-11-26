@@ -7,14 +7,11 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, Protocol
 
-from pypdf import PdfReader
-from pypdf.errors import PdfReadError
-
 from pdf_parser.clients.paddlex import PaddleXClient
 from pdf_parser.config import Settings
-from pdf_parser.errors import InvalidImageError, InvalidPdfError
+from pdf_parser.errors import InvalidImageError
 from pdf_parser.ingestion.image import detect_image_format
-from pdf_parser.ingestion.pdf import iter_pdf_pages
+from pdf_parser.ingestion.pdf import PdfPart, count_pdf_pages, iter_pdf_pages, read_pdf_parts
 from pdf_parser.models import PageResult, ParseResponse, ResultData
 from pdf_parser.normalization.paddlex import normalize_page
 
@@ -33,7 +30,7 @@ async def parse_pdf(
     client: PageClient | None = None,
 ) -> ParseResponse:
     settings = settings or Settings()
-    total_pages = _count_pages(path)
+    total_pages = count_pdf_pages(path)
     pages = iter_pdf_pages(path)
 
     if client is not None:
@@ -43,6 +40,30 @@ async def parse_pdf(
             page_results = await _parse_pages(pages, total_pages, settings, paddlex, progress)
 
     return ParseResponse(data=ResultData(doc_recognize_result=page_results))
+
+
+async def parse_pdf_whole(path: Path, settings: Settings) -> ParseResponse:
+    return await _parse_pdf_parts(path, settings, part_count=1)
+
+
+async def parse_pdf_split(path: Path, settings: Settings) -> ParseResponse:
+    return await _parse_pdf_parts(path, settings, part_count=4)
+
+
+async def _parse_pdf_parts(path: Path, settings: Settings, *, part_count: int) -> ParseResponse:
+    parts = read_pdf_parts(path, part_count=part_count)
+    async with PaddleXClient(settings) as client:
+        tasks = [asyncio.create_task(_parse_pdf_part(client, part)) for part in parts]
+        try:
+            part_results = await asyncio.gather(*tasks)
+        finally:
+            # Drain cancelled requests before closing the shared client.
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+    return ParseResponse(
+        data=ResultData(doc_recognize_result=[page for pages in part_results for page in pages])
+    )
 
 
 async def parse_image(
@@ -97,14 +118,12 @@ async def _parse_one(client: PageClient, page_num: int, page_pdf: bytes) -> Page
     return normalize_page(raw_page, page_num, started_at)
 
 
-def _count_pages(path: Path) -> int:
-    try:
-        reader = PdfReader(path)
-        if reader.is_encrypted and reader.decrypt("") == 0:
-            raise InvalidPdfError("PDF 已加密，请先解除密码保护")
-        count = len(reader.pages)
-    except (OSError, PdfReadError) as exc:
-        raise InvalidPdfError(f"无法读取 PDF：{path}") from exc
-    if count == 0:
-        raise InvalidPdfError("PDF 不包含任何页面")
-    return count
+async def _parse_pdf_part(client: PaddleXClient, part: PdfPart) -> list[PageResult]:
+    started_at = time.perf_counter()
+    raw_pages = await client.parse_pdf_pages(
+        part.content, first_page=part.first_page, page_count=part.page_count
+    )
+    return [
+        normalize_page(raw_page, page_num, started_at)
+        for page_num, raw_page in enumerate(raw_pages, start=part.first_page)
+    ]

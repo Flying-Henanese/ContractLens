@@ -10,7 +10,8 @@ Compose 同时编排本项目的 FastAPI 网关、PaddleX Pipeline 和 PaddleOCR
 
 ## 已实现
 
-- 将 PDF 逐页拆分后调用 PaddleX，避免服务默认最多处理 10 页造成文档截断。
+- 支持逐页提交 PDF，并按原文页号组装文档结果。
+- HTTP API 提供整份提交和最多四段并发提交，便于用同一份 PDF 对照吞吐。
 - 支持请求超时、网络失败重试和受控并发。
 - 将 PaddleX `prunedResult` 转换为与现有样例相近的 JSON。
 - 输出正文、版面类型、边界框、阅读顺序、OCR/印章文本和处理耗时。
@@ -61,6 +62,10 @@ CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
 Python 测试和脚本语法检查，之后再在目标服务器完成 Compose 和真实解析烟测。
 
 ## 使用
+
+HTTP 客户端可调用 `/api/v1/documents/parse`、`/api/v1/documents/parse-whole` 或
+`/api/v1/documents/parse-split`。三个入口共用 `file` 上传字段和结果结构。
+见 [HTTP 接口与对照方法](docs/api.md#文档解析)。
 
 检查服务：
 
@@ -205,10 +210,10 @@ uv run pytest
 
 ### T4 CUDA：4 个 Pipeline worker + vLLM DP=4
 
-T4 上已验证并正在运行的配置使用 Nginx 接收内部 Pipeline 请求，再将单页请求分发给
-4 个独立 Pipeline worker；4 个 worker 共享一个 vLLM 服务，vLLM 使用 TP=1、DP=4。
-这是一项显式选择的 CUDA 部署配置，要求 Docker Compose >= 2.24.4，不适用于 Ascend。
-它保留单 Pipeline 默认部署，启用时不会改变网关 API、逐页处理或文档 fail-fast 行为。
+T4 基准配置使用 Nginx 将内部 Pipeline 请求分发给 4 个独立 Pipeline worker。
+4 个 worker 共享一个 vLLM 服务，vLLM 使用 TP=1、DP=4。
+这是一项显式选择的 CUDA 部署配置，要求 Docker Compose >= 2.24.4。
+逐页、整份和分段入口均可使用该拓扑，Nginx 按单次 PaddleX 请求分发。
 性能结论和长尾限制见[基准报告](.harness/reports/benchmarks/2026-11-13-t4-pipeline-replicas.md)。
 
 T4 的 `.env` 运行参数如下；GPU 编号是宿主机编号：

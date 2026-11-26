@@ -34,13 +34,35 @@ class PaddleXClient:
         return self._decode_response(response, context="PaddleX 健康检查")
 
     async def parse_pdf_page(self, page_pdf: bytes, page_num: int) -> dict[str, Any]:
+        pages = await self._parse_pdf_pages(
+            page_pdf, first_page=page_num, page_count=1, include_error_message=True
+        )
+        return pages[0]
+
+    async def parse_pdf_pages(
+        self, pdf: bytes, *, first_page: int, page_count: int
+    ) -> list[dict[str, Any]]:
+        return await self._parse_pdf_pages(
+            pdf, first_page=first_page, page_count=page_count, include_error_message=False
+        )
+
+    async def _parse_pdf_pages(
+        self, pdf: bytes, *, first_page: int, page_count: int, include_error_message: bool
+    ) -> list[dict[str, Any]]:
+        if page_count == 1:
+            context = f"第 {first_page} 页"
+            log_id = f"pdf-parser-page-{first_page}"
+        else:
+            last_page = first_page + page_count - 1
+            context = f"第 {first_page}–{last_page} 页"
+            log_id = f"pdf-parser-pages-{first_page}-{last_page}"
         payload = {
-            "file": base64.b64encode(page_pdf).decode("ascii"),
+            "file": base64.b64encode(pdf).decode("ascii"),
             "fileType": 0,
             "useLayoutDetection": self.settings.use_layout_detection,
             "layoutThreshold": self.settings.layout_threshold,
             "visualize": False,
-            "logId": f"pdf-parser-page-{page_num}",
+            "logId": log_id,
         }
 
         retryer = AsyncRetrying(
@@ -54,18 +76,27 @@ class PaddleXClient:
                 with attempt:
                     response = await self._client.post(self.settings.inference_url, json=payload)
         except (httpx.TransportError, httpx.TimeoutException) as exc:
-            raise PaddleXError(f"第 {page_num} 页请求 PaddleX 失败：{exc}") from exc
+            raise PaddleXError(f"{context}请求 PaddleX 失败：{exc}") from exc
 
-        context = f"第 {page_num} 页"
         body = self._decode_response(response, context=context)
-        if response.status_code != 200 or body.get("errorCode") != 0:
-            message = body.get("errorMsg") or f"HTTP {response.status_code}"
+        error_code = body.get("errorCode")
+        if response.status_code != 200 or error_code != 0:
+            message = f"HTTP {response.status_code}"
+            if include_error_message:
+                message = body.get("errorMsg") or message
+            elif isinstance(error_code, int):
+                message = f"{message}，PaddleX errorCode={error_code}"
             raise PaddleXError(f"{context}解析失败：{message}")
 
-        results = (body.get("result") or {}).get("layoutParsingResults") or []
-        if len(results) != 1:
-            raise PaddleXError(f"{context}响应页数异常：期望 1 页，实际 {len(results)} 页")
-        return results[0]
+        result = body.get("result") or {}
+        if not isinstance(result, dict):
+            raise PaddleXError(f"{context}：PaddleX 的 result 不是对象")
+        pages = result.get("layoutParsingResults") or []
+        if not isinstance(pages, list) or any(not isinstance(page, dict) for page in pages):
+            raise PaddleXError(f"{context}：PaddleX 的 layoutParsingResults 不是页面对象列表")
+        if len(pages) != page_count:
+            raise PaddleXError(f"{context}响应页数异常：期望 {page_count} 页，实际 {len(pages)} 页")
+        return pages
 
     @staticmethod
     def _decode_response(response: httpx.Response, *, context: str) -> dict[str, Any]:
