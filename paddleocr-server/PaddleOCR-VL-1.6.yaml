@@ -18,7 +18,7 @@ use_doc_preprocessor: True
 # 启用 PP-DocLayoutV3 版面检测；关闭后不会按版面框拆分页面。
 use_layout_detection: True
 # 对检测到的图表区域执行图表识别。
-use_chart_recognition: True
+use_chart_recognition: False
 # 对检测到的印章区域执行印章识别。
 use_seal_recognition: True
 # 将各版面块内容整理为适合输出的格式。
@@ -43,7 +43,7 @@ SubModules:
     model_name: PP-DocLayoutV3
     model_dir: null
     # 单轮版面检测批量；过大可能增加 Pipeline GPU/NPU 显存占用。
-    batch_size: 32
+    batch_size: 24
     # 各版面类别的置信度阈值；索引 20 为 seal，使用更高阈值过滤模糊印章。
     threshold:
       0: 0.3
@@ -114,7 +114,7 @@ SubModules:
       # Docker Compose 使用服务名；start_vl.sh 会生成指向 127.0.0.1 的本地配置。
       server_url: http://paddleocr-vlm-server:8118/v1
       # Pipeline 同时提交给 vLLM 的版面块请求上限。
-      max_concurrency: 32
+      max_concurrency: 64
 
 SubPipelines:
   DocPreprocessor:
