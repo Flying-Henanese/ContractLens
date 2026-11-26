@@ -4,6 +4,24 @@
 
 ## 最近观测
 
+观测日期：2026-11-26（T4 CUDA，GPU 0–4）
+
+在 `/home/mineru_dev/projects/ContractLens` 切换到 `codex/t4-pipeline-replicas-benchmark`，
+以运行时提交 `acd8dc8` 和四 worker 模式执行 `bash scripts/docker.sh config`、`up`、`ps`。
+复用现有镜像。部署后网关、Nginx、四个 PaddleX worker 和 vLLM 均为 healthy。
+宿主机 `8888/openapi.json`、`8880/health` 和 `8118/v1/models` 均返回 HTTP 200。
+
+四个 worker 的运行时配置均为 GPU 0、每批 16 页，版面检测、文档预处理和方向分类的批大小均为 4，
+每 worker 子图并发为 16。vLLM 使用 GPU 1/2/3/4 和 DP=4。容器中的 PaddleX 版本为 3.6.1，
+vLLM 版本为 0.10.2。
+
+一页合成 PDF 的 CLI 烟测通过输出契约校验。两个网关端点对同一份 17 页合成 PDF 均返回 HTTP 200，
+通过 `validate_result.py`，页序与每页识别出的编号均一致。Nginx 日志显示 `/parse-split` 对应的
+四个上游请求各命中一个 worker。烟测后四个 worker 均健康，重启次数为 0，Docker 未记录 OOM kill。
+本次验证覆盖启动和功能烟测，长文档与持续并发下的显存峰值仍待测量。
+
+## 历史观测
+
 观测日期：2026-11-13（T4 CUDA 四 Pipeline 配置）
 
 远端目录 `/home/mineru_dev/projects/ContractLens` 位于分支
