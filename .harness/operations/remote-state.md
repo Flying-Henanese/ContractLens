@@ -4,6 +4,15 @@
 
 ## 最近观测
 
+观测日期为 2026-11-26，运行时提交 `a934084`。通过根目录生命周期脚本重新加载 T4 四 worker
+拓扑后，四个 worker 的 `/tmp/pipeline-replicas.yaml` 均为 `use_chart_recognition: False`。
+7 个容器均为 healthy。Pipeline 使用 GPU 0，vLLM 使用 GPU 1–4、DP=4。
+
+使用一页合成折线图 PDF 请求 PaddleX，省略 `useChartRecognition` 请求字段，实际响应设置为
+关闭图表识别。版面检测得到一个 `chart` 区域，其输出为图片引用。相同 PDF 经网关
+`/api/v1/documents/parse-split` 返回 HTTP 200、1 页，并通过严格输出契约校验。
+此次验证覆盖配置加载和合成图表烟测，585 页文档关闭图表识别后的性能尚未复测。
+
 观测日期：2026-11-26（T4 CUDA，GPU 0–4）
 
 在 `/home/mineru_dev/projects/ContractLens` 切换到 `codex/t4-pipeline-replicas-benchmark`，
