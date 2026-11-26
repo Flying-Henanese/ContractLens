@@ -30,14 +30,16 @@ PaddleX 实现。启动目标镜像后应记录 PaddleX 版本，并通过源码
 ```yaml
 use_doc_preprocessor: True
 use_layout_detection: True
-use_chart_recognition: True
+use_chart_recognition: False
 use_seal_recognition: True
 format_block_content: True
 merge_layout_blocks: True
 ```
 
 - 开启文档预处理和 PP-DocLayoutV3 版面检测。
-- 开启图表和印章识别。
+- 关闭图表结构化识别，`chart` 区域按图片处理。PaddleX HTTP 请求可通过
+  `useChartRecognition` 覆盖该默认值。标记为 `table` 的区域继续执行表格识别。
+- 开启印章识别。
 - 格式化版面块内容并合并相关版面块。
 
 ## Markdown 忽略标签

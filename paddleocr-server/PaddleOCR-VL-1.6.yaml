@@ -14,8 +14,8 @@ layout_prep_cpu_workers: 16
 use_doc_preprocessor: True
 # 启用 PP-DocLayoutV3 版面检测；关闭后不会按版面框拆分页面。
 use_layout_detection: True
-# 对检测到的图表区域执行图表识别。
-use_chart_recognition: True
+# 图表区域按图片处理，避免图表转结构化内容产生长输出。
+use_chart_recognition: False
 # 对检测到的印章区域执行印章识别。
 use_seal_recognition: True
 # 将各版面块内容整理为适合输出的格式。
