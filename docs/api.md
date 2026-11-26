@@ -45,7 +45,7 @@ Pipeline worker 处理，四段请求分别由 Nginx 分流。实际落点以 Ng
 整份耗时。
 
 T4 CUDA 副本代理的请求体上限为 `256m`。Base64 和 JSON 编码后，原始 PDF 或单段 PDF 的
-可用大小略低于 192 MiB。代理的 `proxy_read_timeout` 为 120 秒，按两次上游读取之间的等待时间计算。
+可用大小略低于 192 MiB。代理的 `proxy_read_timeout` 为 600 秒，按两次上游读取之间的等待时间计算。
 更新挂载的代理模板后，重启副本拓扑以重新生成 Nginx 配置。
 
 PNG 调用示例：
