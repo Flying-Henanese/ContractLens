@@ -7,12 +7,12 @@
 
 ```yaml
 pipeline_name: PaddleOCR-VL-1.6
-batch_size: 64
+batch_size: 16
 use_queues: True
 layout_prep_cpu_workers: 16
 ```
 
-- `batch_size: 64`：Pipeline 顶层批处理配置。
+- `batch_size: 16` 是 Pipeline 每批处理的页数上限。
 - `use_queues: True`：启用输入、CV 和 VLM 阶段之间的内部队列流水线。
 - `layout_prep_cpu_workers: 16`：这是运行时版本依赖项。支持该字段的 PaddleX
   以页面为任务并行完成过滤、裁剪、合并和 VLM 输入构造，实际 worker 数不超过
@@ -63,7 +63,7 @@ aside_text
 ```yaml
 module_name: layout_detection
 model_name: PP-DocLayoutV3
-batch_size: 8
+batch_size: 4
 layout_nms: True
 layout_unclip_ratio: [1.0, 1.0]
 ```
@@ -103,14 +103,14 @@ genai_config:
 
 ```yaml
 DocPreprocessor:
-  batch_size: 8
+  batch_size: 4
   use_doc_orientation_classify: True
   use_doc_unwarping: True
 ```
 
 预处理阶段开启：
 
-- 文档方向分类：`PP-LCNet_x1_0_doc_ori`
+- 文档方向分类模型 `PP-LCNet_x1_0_doc_ori` 的批大小为 4。
 - 文档展平/畸变校正：`UVDoc`
 
 这些操作发生在 PP-DocLayoutV3 版面分析之前。

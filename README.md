@@ -219,8 +219,8 @@ T4 基准配置使用 Nginx 将内部 Pipeline 请求分发给 4 个独立 Pipel
 T4 的 `.env` 运行参数如下；GPU 编号是宿主机编号：
 
 ```dotenv
-PIPELINE_GPU_ID=1
-VLM_GPU_IDS=2,3,4,5
+PIPELINE_GPU_ID=0
+VLM_GPU_IDS=1,2,3,4
 VLM_DATA_PARALLEL_SIZE=4
 VLM_DATA_PARALLEL_BACKEND=mp
 VLM_GPU_MEMORY_UTILIZATION=0.6
@@ -229,8 +229,8 @@ VLM_MAX_NUM_BATCHED_TOKENS=16384
 ```
 
 用以下命令选择四 worker 配置并检查健康状态。`PIPELINE_SUBGRAPH_CONCURRENCY=16`
-设置每个 worker 的子图并发；4 个 worker 共用 Pipeline GPU 1。镜像、模型及 vLLM
-参数保持与报告记录一致。
+设置每个 worker 的子图并发。4 个 worker 共用 GPU 0，每个 worker 的 Pipeline 每批最多
+处理 16 页，版面检测、文档预处理和方向分类的批大小均为 4。vLLM 使用 GPU 1–4。
 
 ```bash
 CONTRACTLENS_PLATFORM=cuda \
