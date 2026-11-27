@@ -4,50 +4,14 @@ set -Eeuo pipefail
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly ACTION="${1:-config}"
-readonly CONTRACTLENS_PLATFORM="${CONTRACTLENS_PLATFORM:-cuda}"
 
-case "${CONTRACTLENS_PLATFORM}" in
-    cuda)
-        readonly COMPOSE_FILE="${PROJECT_ROOT}/compose.yaml"
-        readonly DEFAULT_ENV_FILE="${PROJECT_ROOT}/.env"
-        ;;
-    ascend)
-        readonly COMPOSE_FILE="${PROJECT_ROOT}/compose.ascend.yaml"
-        readonly DEFAULT_ENV_FILE="${PROJECT_ROOT}/.env.ascend"
-        ;;
-    *)
-        echo "CONTRACTLENS_PLATFORM must be cuda or ascend; received: ${CONTRACTLENS_PLATFORM}" >&2
-        exit 2
-        ;;
-esac
-
-# Ascend replicas are opt-in; preserve the default single-Pipeline topology.
-COMPOSE_REPLICAS_ARGS=()
-case "${CONTRACTLENS_PIPELINE_MODE:-single}" in
-    single) ;;
-    replicas)
-        if [[ "${CONTRACTLENS_PLATFORM}" != ascend ]]; then
-            echo "This checkout supports replicas on Ascend only." >&2
-            exit 2
-        fi
-        COMPOSE_REPLICAS_ARGS=(-f "${PROJECT_ROOT}/compose.replicas.ascend.yaml")
-        case "${CONTRACTLENS_PIPELINE_WORKERS:-2}" in
-            2) ;;
-            4) COMPOSE_REPLICAS_ARGS+=(-f "${PROJECT_ROOT}/compose.replicas4.ascend.yaml") ;;
-            *) echo "Pipeline workers must be 2 or 4." >&2; exit 2 ;;
-        esac
-        ;;
-    *) echo "Pipeline mode must be single or replicas." >&2; exit 2 ;;
-esac
-
-readonly CONTRACTLENS_ENV_FILE="${CONTRACTLENS_ENV_FILE:-${DEFAULT_ENV_FILE}}"
-COMPOSE_ENV_ARGS=()
-if [[ -f "${CONTRACTLENS_ENV_FILE}" ]]; then
-    COMPOSE_ENV_ARGS=(--env-file "${CONTRACTLENS_ENV_FILE}")
+COMPOSE_ARGS=(-f compose.yaml)
+if [[ -n "${CONTRACTLENS_ENV_FILE:-}" ]]; then
+    COMPOSE_ARGS+=(--env-file "${CONTRACTLENS_ENV_FILE}")
 fi
 
 compose() {
-    docker compose ${COMPOSE_ENV_ARGS[@]+"${COMPOSE_ENV_ARGS[@]}"} -f "${COMPOSE_FILE}" ${COMPOSE_REPLICAS_ARGS[@]+"${COMPOSE_REPLICAS_ARGS[@]}"} "$@"
+    docker compose "${COMPOSE_ARGS[@]}" "$@"
 }
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -73,7 +37,7 @@ case "${ACTION}" in
         compose up --detach --remove-orphans
         ;;
     down)
-        compose down
+        compose down --remove-orphans
         ;;
     restart)
         compose restart
@@ -85,7 +49,7 @@ case "${ACTION}" in
         compose ps
         ;;
     *)
-        echo "Usage: CONTRACTLENS_PLATFORM={cuda|ascend} $0 {config|build|up|down|restart|logs|ps}" >&2
+        echo "Usage: $0 {config|build|up|down|restart|logs|ps}" >&2
         exit 2
         ;;
 esac

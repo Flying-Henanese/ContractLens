@@ -7,7 +7,7 @@
 - 阅读根目录 `AGENTS.md`。
 - 检查 `git status --short`，保留用户已有的无关改动。
 - 确认任务属于 CUDA、昇腾、两者共用部分，还是旧 PP-StructureV3 入口。
-- 涉及 CUDA 时核对根 `README.md`、`../compose.yaml` 和 `../.env.template`。
+- 涉及 CUDA 时核对根 `README.md`、`../compose.cuda.yaml` 和 `../.env.template`。
 - 涉及昇腾时核对根 `../docs/container-deployment.md`、`../compose.ascend.yaml`
   和 `../.env.ascend.template`；本目录的同名 Compose 仅作历史推理参考。
 - 涉及 VLM 时核对[平台启动方式](../context/runtime-and-config.md)、有效参数和环境变量。

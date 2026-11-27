@@ -1,4 +1,4 @@
-# Layer after compose.ascend.yaml and compose.replicas.ascend.yaml.
+# Layer after compose.ascend.single.yaml and compose.replicas.ascend.yaml.
 services:
   paddleocr-vl-api:
     environment:

@@ -1,0 +1,4 @@
+services:
+  paddleocr-vl-api:
+    environment:
+      PIPELINE_EXTRA_UPSTREAMS: ""

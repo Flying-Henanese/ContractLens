@@ -3,8 +3,8 @@
 ## Scope and authority
 
 This directory documents the imported inference module. ContractLens production
-configuration is authoritative at the repository root: `compose.yaml`,
-`compose.ascend.yaml`, `.env.template`, `.env.ascend.template`, and
+configuration is authoritative at the repository root: `compose*.yaml`,
+`.env.template`, `.env.ascend.template`, and
 `scripts/docker.sh`. The local two-service Compose files are historical
 inference-only references and are not a deployment entry point.
 
@@ -28,8 +28,7 @@ inference-only references and are not a deployment entry point.
   Pipeline sets `ASCEND_RT_VISIBLE_DEVICES` from `PIPELINE_NPU_ID` (default `7`).
   vLLM sets it from `VLM_NPU_IDS` (default `4,5,6`), with DP `3` and HBM-use parameter `0.3`.
 - Ascend vLLM uses `quay.io/ascend/vllm-ascend:v0.30.0rc2` and starts `vllm serve`
-  directly. Compose supplies the model path and serving flags. `ASCEND_VLM_IMAGE_TAG`
-  remains in the env template. The effective image is set by `image:` in the root Ascend Compose.
+  directly. `compose.ascend.single.yaml` supplies the model path, image, and serving flags.
 - Replica workers default to `ASCEND_PRIVILEGED=false`. Their device mount uses
   `/dev/davinci${PIPELINE_NPU_ID:-7}` while their `ASCEND_RT_VISIBLE_DEVICES` is fixed
   at `3`. Check which physical device the target runtime exposes before enabling
@@ -37,8 +36,8 @@ inference-only references and are not a deployment entry point.
 
 ## Configuration layering
 
-1. The root `.env.template` or `.env.ascend.template` supplies deployment
-   parameters.
+1. Copy the platform's template to the repository's `.env` to set topology and
+   deployment parameters. `compose.yaml` defaults to four Ascend workers.
 2. Root Compose manages the gateway, Pipeline, and VLM in one lifecycle. The
    gateway calls `http://paddleocr-vl-api:8080`; this service runs Nginx when
    Ascend replica mode is selected.
@@ -58,9 +57,9 @@ the repository's scripted device-count check. Compose parsing resolves the value
 From the repository root:
 
 ```bash
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh ps
+bash scripts/docker.sh config
+bash scripts/docker.sh up
+bash scripts/docker.sh ps
 ```
 
 Build only when the gateway image inputs (`pyproject.toml`, `uv.lock`, Dockerfile,

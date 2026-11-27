@@ -26,11 +26,7 @@ git diff --check
 ```bash
 cd ..
 bash scripts/docker.sh config
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
-CONTRACTLENS_PLATFORM=ascend CONTRACTLENS_PIPELINE_MODE=replicas \
-  CONTRACTLENS_PIPELINE_WORKERS=2 bash scripts/docker.sh config
-CONTRACTLENS_PLATFORM=ascend CONTRACTLENS_PIPELINE_MODE=replicas \
-  CONTRACTLENS_PIPELINE_WORKERS=4 bash scripts/docker.sh config
+uv run pytest tests/test_ascend_replicas.py tests/test_container_config.py
 ```
 
 ## 服务检查

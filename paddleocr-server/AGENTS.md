@@ -11,17 +11,18 @@ For ContractLens production, the only supported lifecycle entry is the repositor
 root:
 
 ```bash
-CONTRACTLENS_PLATFORM={cuda|ascend} bash scripts/docker.sh <config|build|up|ps|logs|restart|down>
+bash scripts/docker.sh <config|build|up|ps|logs|restart|down>
 ```
 
-The default root Compose topology runs three services:
+Root Compose reads the repository's `.env` and defaults to four Ascend Pipeline
+workers:
 
 ```text
-api -> paddleocr-vl-api -> paddleocr-vlm-server
+api -> paddleocr-vl-api (Nginx) -> pipeline-1 through pipeline-4 -> paddleocr-vlm-server
 ```
 
-Ascend replica mode runs Nginx as `paddleocr-vl-api` and adds two or four
-Pipeline workers. The root lifecycle helper manages the selected topology.
+CUDA and Ascend single-Pipeline mode run PaddleX as `paddleocr-vl-api`. The root
+lifecycle helper manages the selected topology.
 
 The local `compose*.yaml` files and `start_vl.sh` remain imported inference-only
 references. They may help inspect the original hardware configuration, but must not
@@ -40,10 +41,9 @@ gateway and can conflict with the root Compose service names and ports.
 
 ## Module responsibilities and constraints
 
-The default inference chain has one PaddleX Pipeline and one vLLM API Server with
-multiple data-parallel model ranks. The optional Ascend Nginx topology uses the same
-vLLM service. Further proxy, Ray Serve, or VLM addressing changes require explicit
-user direction.
+The inference chain uses one vLLM API server with multiple data-parallel model ranks.
+Ascend replica mode runs multiple PaddleX workers behind Nginx. Further proxy,
+Ray Serve, or VLM addressing changes require explicit user direction.
 
 - Keep Pipeline and VLM physical GPU/NPU assignments separate.
 - The number of `VLM_GPU_IDS` or `VLM_NPU_IDS` must equal
@@ -59,8 +59,7 @@ user direction.
 
 ## Key files
 
-- `../compose.yaml`, `../compose.ascend.yaml`: supported CUDA/Ascend production
-  orchestration.
+- `../compose.yaml`: root entry point for CUDA and Ascend production orchestration.
 - `../.env.template`, `../.env.ascend.template`: supported deployment templates.
 - `docker/vlm-entrypoint.sh`, `docker/vlm-entrypoint-ascend.sh`: CUDA/Ascend VLM
   startup validation and runtime configuration generation.
@@ -80,7 +79,7 @@ scripts use Bash with `set -Eeuo pipefail`; quote paths and variables.
 For an Ascend-related change, first validate the root topology:
 
 ```bash
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
+bash scripts/docker.sh config
 bash -n paddleocr-server/docker/vlm-entrypoint-ascend.sh
 git diff --check
 ```

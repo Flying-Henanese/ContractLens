@@ -1,4 +1,9 @@
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,7 +40,7 @@ def test_ascend_dockerfile_is_multi_arch_and_separates_build_from_runtime():
 
 
 def test_unified_cuda_compose_starts_gateway_and_inference_stack_together():
-    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    compose = (ROOT / "compose.cuda.yaml").read_text(encoding="utf-8")
 
     assert "dockerfile: ${PDF_PARSER_DOCKERFILE:-Dockerfile}" in compose
     assert 'CUDA_VERSION: "12.2.2"' in compose
@@ -60,7 +65,7 @@ def test_unified_cuda_compose_starts_gateway_and_inference_stack_together():
 
 
 def test_unified_ascend_compose_keeps_gateway_and_inference_in_one_lifecycle():
-    compose = (ROOT / "compose.ascend.yaml").read_text(encoding="utf-8")
+    compose = (ROOT / "compose.ascend.single.yaml").read_text(encoding="utf-8")
 
     assert "api:" in compose
     assert "paddleocr-vlm-server:" in compose
@@ -105,10 +110,42 @@ def test_linux_docker_helper_wraps_expected_compose_actions():
     for action in ("config", "build", "up", "down", "restart", "logs", "ps"):
         assert f"    {action})" in helper
     assert "docker compose" in helper
-    assert "CONTRACTLENS_PLATFORM" in helper
     assert "CONTRACTLENS_ENV_FILE" in helper
-    assert "compose.ascend.yaml" in helper
     assert not (ROOT / "scripts" / "docker.ps1").exists()
+
+
+@pytest.mark.parametrize(
+    ("action", "compose_action"),
+    [
+        ("up", ["up", "--detach", "--remove-orphans"]),
+        ("down", ["down", "--remove-orphans"]),
+    ],
+)
+def test_lifecycle_uses_same_root_compose_from_another_directory(tmp_path, action, compose_action):
+    if not shutil.which("bash"):
+        pytest.skip("Lifecycle helper requires Bash")
+
+    probe = """
+docker() {
+    if [[ "$*" == "compose version" ]]; then return 0; fi
+    printf '%s\\n' "$PWD" "$@"
+}
+export -f docker
+exec bash "$@"
+"""
+    env = {
+        name: value for name, value in os.environ.items() if not name.startswith("CONTRACTLENS_")
+    }
+    result = subprocess.run(
+        ["bash", "-c", probe, "probe", str(ROOT / "scripts" / "docker.sh"), action],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert Path(result.stdout.splitlines()[0]).resolve() == ROOT
+    assert result.stdout.splitlines()[1:] == ["compose", "-f", "compose.yaml", *compose_action]
 
 
 def test_imported_inference_module_defers_production_lifecycle_to_root():

@@ -13,7 +13,8 @@
 - CUDA vLLM 诊断端口：`http://192.168.0.67:8118`
 - 部署方式：T4 使用仓库根目录 CUDA Compose；Ascend 使用另行验收的 NPU 主机
 - 默认 Compose 服务：`api`、`paddleocr-vl-api`、`paddleocr-vlm-server`
-- T4 生命周期入口：`CONTRACTLENS_PLATFORM=cuda bash scripts/docker.sh <config|build|up|ps|logs|restart|down>`
+- T4 在根 `.env` 中设置 `CONTRACTLENS_PLATFORM=cuda`，通过
+  `bash scripts/docker.sh <config|build|up|ps|logs|restart|down>` 管理容器
 
 2026-09-11 已在 T4 CUDA 环境完成一次统一 Compose 启动、端点检查和真实解析烟测；镜像、GPU
 分配、端口和当前在线状态属于易变观测，唯一记录见 [`remote-state.md`](remote-state.md)。每次部署

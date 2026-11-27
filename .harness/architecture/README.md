@@ -52,11 +52,12 @@ Compose 网络内使用。Pipeline 和 vLLM 容器将 `./paddleocr-server` 只�
 
 ## Compose 拓扑
 
-- CUDA 和 Ascend 默认均为单 Pipeline。网关等待 `paddleocr-vl-api` 健康，Pipeline 等待
-  vLLM 健康。根 Compose 分别使用 `compose.yaml` 和 `compose.ascend.yaml`。两平台的
+- 根 `compose.yaml` 读取 `.env` 中的 `CONTRACTLENS_PLATFORM`，默认选择昇腾四副本。
+  `cuda` 加载 `compose.cuda.yaml` 的单 Pipeline 拓扑。网关等待 `paddleocr-vl-api` 健康，
+  Pipeline 等待 vLLM 健康。两平台的
   [vLLM 启动路径和设备要求](../../paddleocr-server/.harness/context/runtime-and-config.md)各自维护。
-- Ascend 可在调用 `scripts/docker.sh` 时设置环境变量 `CONTRACTLENS_PIPELINE_MODE=replicas`，
-  通过 `CONTRACTLENS_PIPELINE_WORKERS=2` 或 `4` 选择副本数。Overlay 将
+- 昇腾在 `.env` 中通过 `CONTRACTLENS_PIPELINE_MODE=single` 选择单 Pipeline，或在
+  `replicas` 模式通过 `CONTRACTLENS_PIPELINE_WORKERS=2` 或 `4` 选择副本数。Overlay 将
   `paddleocr-vl-api` 替换为 Nginx，Nginx 等待所有 Pipeline worker 健康，再为请求做
   `least_conn` 分发。各 worker 共享 Pipeline 设备配置与一个 vLLM 服务。网关沿用原服务名和协议。
 - Ascend 的启动、设备映射、并发容量和真实解析仍需目标主机验证。见
@@ -82,6 +83,6 @@ Compose 网络内使用。Pipeline 和 vLLM 容器将 `./paddleocr-server` 只�
 | 最终 JSON 类型和字段 | `src/pdf_parser/models.py` | 归一化、服务和 harness 验证测试 |
 | 用户可见领域异常 | `src/pdf_parser/errors.py` | 最接近异常来源的测试 |
 | PaddleX Pipeline、vLLM、CUDA/Ascend 设备与推理镜像配置 | `paddleocr-server/` | 推理模块静态检查与目标硬件验证 |
-| 网关与推理模块的共同生命周期 | `compose.yaml`、`compose.ascend.yaml`、`compose.replicas*.ascend.yaml`、`scripts/docker.sh` | `tests/test_container_config.py`、`tests/test_ascend_replicas.py` |
+| 网关与推理模块的共同生命周期 | 根目录 `compose*.yaml`、`scripts/docker.sh` | `tests/test_container_config.py`、`tests/test_ascend_replicas.py` |
 
 稳定行为只在 [`invariants.md`](invariants.md) 定义。具体远端配置不是架构事实，见 [`../operations/remote-state.md`](../operations/remote-state.md)。

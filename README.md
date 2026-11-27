@@ -28,35 +28,35 @@ uv sync
 
 ## 统一 Docker Compose 部署
 
-`paddleocr-server/` 是已导入的 PaddleOCR-VL 推理模块，保留其 CUDA、Ascend、Pipeline 和
-vLLM 配置。根目录 Compose 将下列三个进程作为同一个项目启动和停止：
+`paddleocr-server/` 是已导入的 PaddleOCR-VL 推理模块。根目录 Compose 将网关、PaddleX 和
+vLLM 作为同一个项目管理，默认在昇腾平台运行四个 Pipeline 副本。
 
 ```text
 api                       对外文档接口，默认端口 8888
-paddleocr-vl-api          PaddleX layout-parsing Pipeline，默认端口 8880
+paddleocr-vl-api          PaddleX 入口，默认端口 8880；副本模式下使用 Nginx
+pipeline-1 至 pipeline-4  默认昇腾拓扑中的四个 PaddleX worker
 paddleocr-vlm-server      PaddleOCR-VL vLLM 后端，默认端口 8118（CUDA）
 ```
 
 网关在 Compose 网络内固定通过 `http://paddleocr-vl-api:8080` 调用 Pipeline；这里的
-`8080` 是 Pipeline 容器端口，不能替换为宿主机端口 `8880`。因此同一条命令会等待
-vLLM、Pipeline 和网关按依赖顺序启动，`down` 也会停止整套栈。
+`8080` 是 Compose 内部端口，宿主机可通过 `8880` 访问 PaddleX。容器按依赖顺序启动，
+`down` 会停止整套服务并清理同项目旧拓扑遗留的容器。
 
-复制环境模板后，请确认设备编号、模型缓存路径和镜像标签与目标服务器一致：
+首次部署时，昇腾主机将 [`.env.ascend.template`](.env.ascend.template) 复制为根目录
+`.env`，CUDA/T4 主机使用 [`.env.template`](.env.template)。已有 `.env` 时保留本机参数，
+将旧 `.env.ascend` 的设备、端口和缓存设置合并进去，并确认平台。昇腾四副本使用
+`CONTRACTLENS_PLATFORM=ascend`、`CONTRACTLENS_PIPELINE_MODE=replicas` 和
+`CONTRACTLENS_PIPELINE_WORKERS=4`。确认旧模板中的 `single` 和 `2` 已按目标拓扑更新。
+CUDA/T4 使用 `CONTRACTLENS_PLATFORM=cuda`。Compose 优先使用 Shell 中已导出的同名变量，
+迁移时移除旧的 export 设置。
 
 ```bash
-cp .env.template .env
 bash scripts/docker.sh config
 bash scripts/docker.sh up
 bash scripts/docker.sh ps
 ```
 
-默认是 CUDA Compose。Ascend 使用独立的完整 Compose 文件：
-
-```bash
-cp .env.ascend.template .env.ascend
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
-```
+停机使用 `bash scripts/docker.sh down`。
 
 本地没有 Docker、目标驱动、模型缓存或 GPU/NPU 时，不要尝试运行上述命令；可先运行离线
 Python 测试和脚本语法检查，之后再在目标服务器完成 Compose 和真实解析烟测。

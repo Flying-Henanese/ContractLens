@@ -4,7 +4,7 @@
 
 This directory is an imported inference module, not the production deployment
 entry point. From the ContractLens repository root, use `scripts/docker.sh` with
-the root `compose.yaml` or `compose.ascend.yaml`; it manages the gateway, PaddleX,
+the root `compose.yaml`; it manages the gateway, PaddleX,
 and vLLM as one lifecycle. The local Compose and host-start examples below are
 historical inference-only references. Do not use them to deploy ContractLens: they
 omit the gateway and can conflict with the root services and ports.
@@ -57,7 +57,7 @@ data-parallel-backend: mp
 
 本目录保留的两个 Compose 文件反映导入前的 Pipeline/VLM 配置关系，但其旧环境模板
 并未作为 ContractLens 文件提供，也不启动网关。不要执行这些旧命令；生产环境中的设备、
-缓存和镜像参数应从根 `.env.template` 或 `.env.ascend.template` 设置，并由根 Compose
+平台、缓存和镜像参数应将根 `.env.template` 或 `.env.ascend.template` 的设定写入 `.env`，由根 Compose
 统一编排。
 
 ## 历史宿主机 uv 启动参考（非 ContractLens 部署入口）

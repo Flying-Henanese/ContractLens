@@ -5,8 +5,9 @@ The repository contains the ContractLens gateway and an imported
 shared lifecycle:
 
 1. `paddleocr-vlm-server` starts the PaddleOCR-VL vLLM replicas;
-2. `paddleocr-vl-api` waits for the model process, starts PaddleX, and exposes
-   `/layout-parsing` on container port `8080`; and
+2. `paddleocr-vl-api` exposes `/layout-parsing` on container port `8080`. In the
+   default Ascend topology it runs Nginx in front of four PaddleX workers, which wait
+   for vLLM. In single-Pipeline topologies it runs PaddleX itself.
 3. `api` waits for PaddleX health, then exposes the ContractLens document API on
    port `8888`.
 
@@ -40,14 +41,19 @@ and write temporary uploaded PDFs under the `/tmp` tmpfs.
 
 ## Compose configuration
 
-Compose reads `.env`. Start from `.env.template` and review the gateway, inference
-device, image, and model-cache settings. Inside the unified Compose network the gateway
-always uses `http://paddleocr-vl-api:8080`; `PDF_PARSER_ENDPOINT` remains for standalone
-CLI/FastAPI use and cannot override the internal service address.
+Root `compose.yaml` selects the platform using `CONTRACTLENS_PLATFORM` from the
+repository's `.env`. Start from `.env.ascend.template` on Ascend or `.env.template`
+on CUDA and copy its settings into `.env`. Migrate any existing `.env.ascend`
+device, port, and cache settings. For four workers, update legacy topology values to
+`CONTRACTLENS_PIPELINE_MODE=replicas` and `CONTRACTLENS_PIPELINE_WORKERS=4`.
+Clear old shell exports for the same variables when migrating. Inside the Compose
+network the gateway always uses `http://paddleocr-vl-api:8080`.
+`PDF_PARSER_ENDPOINT` is used for standalone CLI/FastAPI.
 
-The default CUDA selection is:
+Select CUDA on NVIDIA hosts, including T4:
 
 ```dotenv
+CONTRACTLENS_PLATFORM=cuda
 PDF_PARSER_DOCKERFILE=Dockerfile
 PDF_PARSER_IMAGE=pdf-parser:cuda12.2
 PDF_PARSER_PORT=8888
@@ -58,10 +64,13 @@ VLM_GPU_IDS=5,6
 VLM_DATA_PARALLEL_SIZE=2
 ```
 
-For an Ascend host, use `compose.ascend.yaml` through the lifecycle helper and set
-the Ascend-specific gateway image and inference device values:
+Ascend uses four workers by default. Set the gateway image and inference device
+values for the host:
 
 ```dotenv
+CONTRACTLENS_PLATFORM=ascend
+CONTRACTLENS_PIPELINE_MODE=replicas
+CONTRACTLENS_PIPELINE_WORKERS=4
 PDF_PARSER_ASCEND_DOCKERFILE=Dockerfile.ascend
 PDF_PARSER_ASCEND_IMAGE=pdf-parser:ascend-ubuntu22.04
 ASCEND_BASE_IMAGE=ubuntu:22.04
@@ -69,16 +78,17 @@ PIPELINE_NPU_ID=7
 VLM_NPU_IDS=4,5,6
 ```
 
-`compose.yaml` is the CUDA topology. For Ascend, see the hardware prerequisites,
-device mounts, privilege settings, and optional two- or four-worker topology in the
-[Ascend guide](../paddleocr-server/ASCEND.md). The Ascend configuration has static
-validation evidence. Runtime acceptance requires an Ascend host.
+Set `CONTRACTLENS_PIPELINE_WORKERS=2` for two Ascend workers, or
+`CONTRACTLENS_PIPELINE_MODE=single` for a single Pipeline. See the hardware
+prerequisites, device mounts, and privilege settings in the
+[Ascend guide](../paddleocr-server/ASCEND.md). Runtime acceptance requires an Ascend
+host.
 
 ## Host prerequisites
 
 For either host, confirm:
 
-1. Docker Engine and Docker Compose v2 are installed;
+1. Docker Engine and Docker Compose 2.24.4 or later are installed;
 2. the host can pull the selected images;
 3. the target host has the appropriate NVIDIA or Ascend container support and device
    drivers for the selected inference topology;
@@ -108,7 +118,8 @@ restart or recreation. None of those latter changes requires an image rebuild.
 
 ## Review and lifecycle commands
 
-The Linux helper defaults to CUDA and non-mutating validation:
+The Linux helper uses the same root Compose entry for each action and defaults to
+configuration validation:
 
 ```bash
 bash scripts/docker.sh
@@ -125,21 +136,16 @@ bash scripts/docker.sh ps
 bash scripts/docker.sh logs
 ```
 
-Other supported actions are `restart` and `down`. The gateway health check requests
+Other supported actions are `restart` and `down`. The `down` action also removes
+containers left behind by a previous topology in the same Compose project.
+The gateway health check requests
 `http://127.0.0.1:8888/openapi.json` inside its container. The external document API
 is available at `http://<host>:${PDF_PARSER_PORT}`.
 
-For Ascend, prefix the same command with `CONTRACTLENS_PLATFORM=ascend`:
-
-```bash
-cp .env.ascend.template .env.ascend
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh config
-CONTRACTLENS_PLATFORM=ascend bash scripts/docker.sh up
-```
-
 ## T4 rollout
 
-The T4 server uses the CUDA selection. Follow the repository remote workflow: inspect the
+Set `CONTRACTLENS_PLATFORM=cuda` in the T4 checkout's `.env` before running the
+helper on that host. Follow the repository remote workflow: inspect the
 remote branch and worktree, pull with `--ff-only`, validate Compose, build only when
 the gateway image inputs changed, update the three-process stack together, inspect all
 health checks and logs, and run a real parse smoke test. Dependency synchronization

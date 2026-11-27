@@ -1,4 +1,4 @@
-# Opt-in Ascend overlay. Workers share the existing Pipeline NPU; validate capacity on hardware.
+# Common Ascend replica overlay. Workers share the existing Pipeline NPU.
 x-pipeline: &pipeline
   image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-vl:${ASCEND_API_IMAGE_TAG:-latest-huawei-npu}
   user: root
@@ -45,7 +45,6 @@ services:
     restart: unless-stopped
     environment:
       PIPELINE_2_STATE: ""
-      PIPELINE_EXTRA_UPSTREAMS: ""
       NGINX_ENVSUBST_FILTER: ^PIPELINE_(2_STATE|EXTRA_UPSTREAMS)$
     ports:
       - "${API_PORT:-8880}:8080"

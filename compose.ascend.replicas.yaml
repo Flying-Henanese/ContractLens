@@ -1,0 +1,5 @@
+include:
+  - path:
+      - ./compose.ascend.single.yaml
+      - ./compose.replicas.ascend.yaml
+      - ./compose.replicas${CONTRACTLENS_PIPELINE_WORKERS:-4}.ascend.yaml

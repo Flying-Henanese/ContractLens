@@ -13,10 +13,12 @@
 
 4. 远端存在未提交改动、分支不符或目录不存在时停止。不得使用强制覆盖、`git reset --hard`
    或递归删除。
-5. 确认远端分支后，必须先使用 fast-forward 同步代码，再验证 Compose 配置：
+5. 确认远端分支后，先使用 fast-forward 同步代码。T4 的根 `.env` 必须有
+   `CONTRACTLENS_PLATFORM=cuda`，请在保留已有设备和端口设置的同时确认该配置，再验证 Compose。
 
    ```powershell
-   ssh t4 "cd /home/mineru_dev/projects/ContractLens && git pull --ff-only && bash scripts/docker.sh config"
+   ssh t4 "cd /home/mineru_dev/projects/ContractLens && git pull --ff-only"
+   ssh t4 "cd /home/mineru_dev/projects/ContractLens && bash scripts/docker.sh config"
    ```
 
 6. 配置验证成功后，按变更范围更新整套服务。仅在首次启动、`pyproject.toml`、`uv.lock`、

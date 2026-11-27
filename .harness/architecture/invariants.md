@@ -6,9 +6,9 @@
 
 1. `src/pdf_parser/` 与 `paddleocr-server/` 是同一仓库中的两个逻辑模块，不再作为两个独立项目
    分别部署；它们仍保留各自的运行时依赖、模型/硬件配置和职责边界。
-2. 根目录 `compose.yaml` 或 `compose.ascend.yaml` 必须将 `api`、`paddleocr-vl-api` 和
-   `paddleocr-vlm-server` 作为一套生命周期管理；`scripts/docker.sh` 是该整套服务唯一受支持的
-   生命周期入口。
+2. 根目录 `compose.yaml` 必须将 `api`、`paddleocr-vl-api`、`paddleocr-vlm-server` 和选定
+   的 Pipeline worker 作为一套生命周期管理。`scripts/docker.sh` 统一使用该配置，
+   `down` 清理同一 Compose 项目的旧拓扑容器。
 3. 统一 Compose 中，网关只能通过 `http://paddleocr-vl-api:8080` 调用 PaddleX Pipeline，不得
    直接调用 vLLM、宿主机端口或历史远端 IP。独立运行网关时才通过 `PDF_PARSER_ENDPOINT` 明确指定
    可访问的 PaddleX 地址。
