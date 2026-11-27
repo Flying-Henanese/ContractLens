@@ -2,7 +2,7 @@
 status: active
 owner: Codex
 created: 2026-11-22
-updated: 2026-11-24
+updated: 2026-11-27
 scope:
   - ascend-runtime
   - paddleocr-server
@@ -19,9 +19,9 @@ blocked_by: []
 
 ## 当前事实与约束
 
-- 用户报告 A100 单 VLM 副本约 3 分钟，昇腾 910B 的 VLM DP4 近 30 分钟。当前分支的 Pipeline 版面检测批量、前处理批量和 VLM 子图并发均为 `32`；`codex/two-gpu-colocated-deployment` 分支分别为 `8`、`8`、`16`。跨平台比较须重新登记现场计时入口、实际配置和版本。
-- 当前仓库的 [Ascend Compose](../../../compose.ascend.yaml) 使用直接 `vllm serve` 启动，默认 DP3；用户报告的现场配置为 DP4。按 [运行配置](../../../paddleocr-server/.harness/context/runtime-and-config.md#huawei-ascend) 核对模型挂载、各 rank 的实际设备，以及副本的可见编号与设备挂载。
-- 网关按页发请求，FastAPI 的解析等待和 PaddleX 客户端超时配置当前均为 600 秒。PaddleX 直连可提交整份 PDF，Nginx 每次分发一个完整 HTTP 请求。记录实际 URL、请求参数、并发、超时、重试和计时范围。核对 `layoutThreshold` 等请求覆盖项，避免两端识别工作量不同。见 [数据流](../../architecture/README.md)、[请求实现](../../../src/pdf_parser/clients/paddlex.py) 和 [代理配置](../../../paddleocr-server/nginx/replicas.conf.template)。
+- 用户报告 A100 单 VLM 副本约 3 分钟，昇腾 910B 的 VLM DP4 近 30 分钟。共卡分支的 Pipeline 版面检测批量、前处理批量和 VLM 子图并发分别为 `24`、`32`、`64`。`codex/two-gpu-colocated-deployment` 分支分别为 `8`、`8`、`16`。跨平台比较须重新登记现场计时入口、实际配置和版本。
+- [Ascend Compose](../../../compose.ascend.yaml) 直接运行 `vllm serve`，基础配置使用 DP3。共卡分支的环境模板选择 DP4，用户报告的现场配置也是 DP4。按 [运行配置](../../../paddleocr-server/.harness/context/runtime-and-config.md#huawei-ascend) 核对模型挂载、各 rank 的实际设备，以及副本的可见编号与设备挂载。
+- 网关的默认解析入口按页发请求，FastAPI 的解析等待和 PaddleX 客户端超时配置均为 1200 秒。PaddleX 直连可提交整份 PDF，Nginx 每次分发一个完整 HTTP 请求。记录实际 URL、请求参数、并发、超时、重试和计时范围。核对 `layoutThreshold` 等请求覆盖项，避免两端识别工作量不同。见 [数据流](../../architecture/README.md)、[请求实现](../../../src/pdf_parser/clients/paddlex.py) 和 [代理配置](../../../paddleocr-server/nginx/replicas.conf.template)。
 - 使用现有部署入口和测试环境。直接调用 vLLM 仅用于容器内诊断。实验中固定模型、镜像及驱动，按 [Ascend 运维指南](../../../paddleocr-server/ASCEND.md) 管理实例。测试产物写入 `output/smoke/`，临时输入和预渲染图放入 `tmp/pdfs/`。共享报告只保留页号、计数、时延、设备指标等摘要。
 
 ## 实施阶段
@@ -108,15 +108,15 @@ for run in range(4):
 
 | 参数 | 初值或候选 | 何时调整 |
 | --- | --- | --- |
-| `VLRecognition.genai_config.max_concurrency` | 每 worker `32 → 48`，收益持续再试 `64` | 单独调整版面块供给。多 worker 先看有效合计在途数及生成 YAML。 |
+| `VLRecognition.genai_config.max_concurrency` | 每 worker `64`，对照 `32`、`48` | 单独调整版面块供给。多 worker 先看有效合计在途数及生成 YAML。 |
 | `use_queues` | `True` | 多页直传保留开启；逐页请求可单独对照 `False`，检查队列组批开销。 |
 | 顶层 `batch_size` | `64` | 多页请求的页面采样批量。首轮保留；整段 PDF 有内存峰值时对照较小档位，例如 `32`。 |
-| `SubModules.LayoutDetection.batch_size` | `32`，对照 `16` | 多页直传、版面检测成为瓶颈时测试。 |
+| `SubModules.LayoutDetection.batch_size` | `24`，对照 `16`、`32` | 多页直传、版面检测成为瓶颈时测试。 |
 | `SubPipelines.DocPreprocessor.batch_size`、其 `DocOrientationClassify.batch_size` | 分别为 `32`、`8`，按阶段 3 对照方向分类批量 | 先确认有足够多的页进入文档前处理。 |
 | `layout_prep_cpu_workers` | `16 → 32` | 版面块准备耗时高且内部批次超过 `16` 页时测试；逐页请求走单页准备。 |
 | `SubModules.VLRecognition.batch_size` | `4096` | 内部版面框批量。首轮保留；确有大批组装、内存峰值或长尾时单独测试降低上限。 |
 | `use_doc_preprocessor`、`use_doc_orientation_classify`、`use_doc_unwarping` | 均为 `True`；平整件优先仅试关展平 | 前者控制整套文档前处理；后两项各自影响方向和变形校正。用 `useDocOrientationClassify`、`useDocUnwarping` 做按请求的限定样本对照。 |
-| `use_chart_recognition`、`use_seal_recognition`、`use_layout_detection` | 均为 `True` | 裁减识别工作量时按业务允许的功能逐项关闭。关闭版面检测会改成整图识别，适合作为单独诊断或业务路径，结果形态与常规版面解析不同。 |
+| `use_chart_recognition`、`use_seal_recognition`、`use_layout_detection` | 分别为 `False`、`True`、`True` | 按业务需要逐项对照。关闭版面检测会改成整图识别，适合作为单独诊断或业务路径，结果形态与常规版面解析不同。 |
 | `LayoutDetection.threshold`、`layout_nms`、`layout_unclip_ratio`、`layout_merge_bboxes_mode`、`merge_layout_blocks` | 现有分类阈值、`True`、`[1.0, 1.0]`、分类策略、`True` | 只有确认 VLM 请求因框数或裁块面积偏高时，再通过质量对照调整。网关的 `PDF_PARSER_LAYOUT_THRESHOLD` 默认 `0.5`，显式 `layoutThreshold` 优先于 YAML；`PDF_PARSER_USE_LAYOUT_DETECTION` 对应网关 `useLayoutDetection`。 |
 | `minPixels`、`maxPixels`、`maxNewTokens` | PaddleX 请求项，以现场默认和自然 token 分布为基线 | 仅在超大裁块或长输出占主导时做质量对照。检查小字、印章和完整表格；压低生成上限可能截断结果。 |
 | `Serving.visualize`、`returnMarkdownImages`、`outputFormats`、`restructurePages` | YAML 可视化已为 `false`；其余为请求项 | 输出编码、传输或重组耗时高时，可按业务需要关闭。PaddleX 3.7 可单独用 `returnMarkdownImages=false` 跳过 Markdown 图片编码。 |
@@ -140,7 +140,7 @@ for run in range(4):
 
 #### 超时和重试口径
 
-记录实际入口的时限。CLI 默认单次请求为 `PDF_PARSER_TIMEOUT_SECONDS`（可由 `--timeout` 覆盖），FastAPI 的解析等待和客户端超时配置为 600 秒，Nginx 的 `proxy_read_timeout` 为 120 秒。记录 `PDF_PARSER_RETRIES` 和实际后端尝试次数。定向实验可以单独测 `PDF_PARSER_RETRIES=0`。区分计算时长和等待时间，按原业务时限验收候选配置。见 [网关 API](../../../src/pdf_parser/api.py) 和 [Nginx 配置](../../../paddleocr-server/nginx/replicas.conf.template)。
+记录实际入口的时限。CLI 默认单次请求为 `PDF_PARSER_TIMEOUT_SECONDS`（可由 `--timeout` 覆盖），FastAPI 的解析等待和客户端超时配置、Nginx 的 `proxy_read_timeout` 均为 1200 秒。记录 `PDF_PARSER_RETRIES` 和实际后端尝试次数。定向实验可以单独测 `PDF_PARSER_RETRIES=0`。区分计算时长和等待时间，按原业务时限验收候选配置。见 [网关 API](../../../src/pdf_parser/api.py) 和 [Nginx 配置](../../../paddleocr-server/nginx/replicas.conf.template)。
 
 ## 验证与验收
 
@@ -153,10 +153,11 @@ for run in range(4):
 - 2026-11-22 汇总现场反馈、仓库配置与上游实现，整理基线、分段对照和参数试跑顺序。待现场采集运行值和耗时。
 - 2026-11-23 补充页面供给、Pipeline、vLLM 和请求层调参清单，记录仓库默认与现场生效值的核对方式。
 - 2026-11-24 对齐当前分支的 Ascend vLLM 启动、Pipeline 批量与并发，以及 FastAPI 超时，现场数据待采集。
+- 2026-11-27 共卡分支采用 `83d23bf` 的 Pipeline 和超时参数，现场数据待采集。
 
 ## 意外发现
 
-- 工作区模板为 DP3，现场反馈为 DP4。必须记录运行中的配置，尤其是额外设备挂载、图模式和入口，才能用测试结果指导后续变更。
+- 基础 Compose 和共卡模板的 DP 数分别为 3 和 4。现场需记录实际模式、设备挂载、图模式和入口，再用测试结果指导后续变更。
 
 ## 决策记录
 

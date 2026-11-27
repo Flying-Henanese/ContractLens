@@ -96,7 +96,7 @@ bash scripts/docker.sh ps
 副本没有独立宿主机端口。应核对 `PIPELINE_NPU_ID` 对应的设备和固定可见编号，确保
 普通副本的物理设备与 VLM 分离。
 所有 worker 继承当前 Ascend 驱动、缓存与设备管理挂载，网关仍连接原服务名。
-Nginx 不挂载 NPU，不自动重发 POST，读取超时为 120 秒。
+Nginx 不挂载 NPU，不自动重发 POST。普通副本和共卡模式共用的 Nginx 读取超时为 1200 秒。
 
 同事验收：先核对镜像、驱动、设备、端口和共享 NPU 内存容量；启动后确认全部容器健康，
 检查网关 `/openapi.json`、代理 `/health`、容器内 VLM `/v1/models`，再执行真实 PDF

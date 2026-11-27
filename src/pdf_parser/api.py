@@ -16,8 +16,8 @@ from pdf_parser.ingestion.image import detect_image_format
 from pdf_parser.models import ParseResponse
 from pdf_parser.service import parse_image, parse_pdf, parse_pdf_split, parse_pdf_whole
 
-DOCUMENT_TIMEOUT_SECONDS = 600.0
-RECEIPT_TIMEOUT_SECONDS = 120.0
+DOCUMENT_TIMEOUT_SECONDS = 1200.0
+RECEIPT_TIMEOUT_SECONDS = 1200.0
 
 _DOCUMENT_PDF_SUFFIXES = {".pdf"}
 _DOCUMENT_PDF_CONTENT_TYPES = {"application/pdf", "application/octet-stream"}
@@ -126,7 +126,7 @@ def _parse_document(
 def recognize_receipt(
     file: Annotated[UploadFile, File(description="需要识别的票据 PDF 或图像")],
 ) -> None:
-    """预留票据识别入口，后续实现将使用 120 秒超时。"""
+    """预留票据识别入口。"""
     _validate_upload(
         file,
         allowed_suffixes=_RECEIPT_SUFFIXES,

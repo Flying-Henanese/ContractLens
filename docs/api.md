@@ -27,7 +27,7 @@ Content-Type 匹配，通过签名校验后以单张图像请求 PaddleX。
 | `/api/v1/documents/parse-split` | 按连续页均分成最多四段，并发提交。段间页数最多相差一页，少于四页时每页一段。 |
 
 三个入口均按原文页号返回 `data.doc_recognize_result`。提交的整份 PDF 或某段缺页、请求失败时，
-整份文档返回失败。文档解析等待和 PaddleX 客户端超时配置均为 600 秒。
+整份文档返回失败。文档解析等待和 PaddleX 客户端超时配置均为 1200 秒。
 
 不接收 DOC、DOCX 或其他 Office 文档；请先在业务侧转换为 PDF 或受支持图像。
 
@@ -45,7 +45,7 @@ Pipeline worker 处理，四段请求分别由 Nginx 分流。实际落点以 Ng
 整份耗时。
 
 Ascend 副本代理的请求体上限为 `256m`。Base64 和 JSON 编码后，原始 PDF 或单段 PDF 的
-可用大小略低于 192 MiB。代理的 `proxy_read_timeout` 为 120 秒，按两次上游读取之间的等待时间计算。
+可用大小略低于 192 MiB。代理的 `proxy_read_timeout` 为 1200 秒，按两次上游读取之间的等待时间计算。
 更新挂载的代理模板后，重启副本拓扑以重新生成 Nginx 配置。
 
 PNG 调用示例：
@@ -58,6 +58,6 @@ curl.exe -X POST "http://127.0.0.1:8888/api/v1/documents/parse" `
 ## 票据识别
 
 `POST /api/v1/receipts/recognize` 接收相同的 `file` 字段。该接口为预留入口，验证上传类型后
-返回 HTTP 501，预留的处理超时配置为 120 秒。
+返回 HTTP 501，预留的处理超时配置为 1200 秒。
 
 交互式接口文档位于 `http://127.0.0.1:8888/docs`。

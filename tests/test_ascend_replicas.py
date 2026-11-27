@@ -44,7 +44,9 @@ def test_resolved_ascend_replicas(workers):
         for volume in proxy["volumes"]
         if volume["target"] == "/etc/nginx/templates/default.conf.template"
     )
-    assert "client_max_body_size 256m;" in template.read_text(encoding="utf-8")
+    nginx_config = template.read_text(encoding="utf-8")
+    assert "client_max_body_size 256m;" in nginx_config
+    assert "proxy_read_timeout 1200s;" in nginx_config
     assert services["api"]["environment"]["PDF_PARSER_ENDPOINT"] == "http://paddleocr-vl-api:8080"
     for index in range(1, workers + 1):
         worker = services[f"pipeline-{index}"]

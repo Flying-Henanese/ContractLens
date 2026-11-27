@@ -15,7 +15,7 @@ from pdf_parser.models import ParseResponse, ResultData
 client = TestClient(app)
 
 
-def test_document_route_is_sync_and_uses_600_second_timeout(monkeypatch):
+def test_document_route_is_sync_and_uses_1200_second_timeout(monkeypatch):
     observed: dict[str, object] = {}
 
     async def fake_parse_pdf(path: Path, settings):
@@ -34,7 +34,7 @@ def test_document_route_is_sync_and_uses_600_second_timeout(monkeypatch):
     assert response.status_code == 200
     assert response.json()["code"] == "success"
     assert observed["content"] == b"%PDF-test"
-    assert observed["timeout"] == DOCUMENT_TIMEOUT_SECONDS == 600
+    assert observed["timeout"] == DOCUMENT_TIMEOUT_SECONDS == 1200
     assert not Path(observed["path"]).exists()
     assert not inspect.iscoroutinefunction(_route("/api/v1/documents/parse").endpoint)
 
@@ -109,7 +109,7 @@ def test_receipt_route_is_sync_accepts_pdf_or_image_and_reports_placeholder():
         assert response.status_code == 501
         assert str(int(RECEIPT_TIMEOUT_SECONDS)) in response.json()["detail"]
 
-    assert RECEIPT_TIMEOUT_SECONDS == 120
+    assert RECEIPT_TIMEOUT_SECONDS == 1200
     assert not inspect.iscoroutinefunction(_route("/api/v1/receipts/recognize").endpoint)
 
 

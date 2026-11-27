@@ -32,14 +32,14 @@ PaddleX 实现。启动目标镜像后应记录 PaddleX 版本，并通过源码
 ```yaml
 use_doc_preprocessor: True
 use_layout_detection: True
-use_chart_recognition: True
+use_chart_recognition: False
 use_seal_recognition: True
 format_block_content: True
 merge_layout_blocks: True
 ```
 
 - 开启文档预处理和 PP-DocLayoutV3 版面检测。
-- 开启图表和印章识别。
+- 开启印章识别，关闭图表结构化识别。
 - 格式化版面块内容并合并相关版面块。
 
 ## Markdown 忽略标签
@@ -65,7 +65,7 @@ aside_text
 ```yaml
 module_name: layout_detection
 model_name: PP-DocLayoutV3
-batch_size: 32
+batch_size: 24
 layout_nms: True
 layout_unclip_ratio: [1.0, 1.0]
 ```
@@ -92,16 +92,16 @@ batch_size: 4096
 genai_config:
   backend: vllm-server
   server_url: http://paddleocr-vlm-server:8118/v1
-  max_concurrency: 32
+  max_concurrency: 64
 ```
 
 - VLM 推理由独立的 vLLM Server 提供。
 - Compose 使用服务名访问；`start_vl.sh` 在运行时将地址替换为
   `http://127.0.0.1:8118/v1`。
-- `max_concurrency: 32` 控制 Pipeline 同时提交的版面块请求数。
-- Ascend 副本入口读取 `PIPELINE_SUBGRAPH_CONCURRENCY`（默认 `16`），生成
+- `max_concurrency: 64` 控制 Pipeline 同时提交的版面块请求数。
+- Ascend 普通副本和共卡模式的入口读取 `PIPELINE_SUBGRAPH_CONCURRENCY`（默认 `16`），生成
   `/tmp/pipeline-replicas.yaml` 时只替换字面值 `max_concurrency: 16`。当前 YAML
-  使用 `32`，因此用该环境变量调整并发不会改变生成的配置。试跑前核对 worker 实际读取的 YAML。
+  使用 `64`，生成的配置会沿用这个值。试跑前核对 worker 实际读取的 YAML。
 - `batch_size: 4096` 是模块批处理配置，不应直接解释为 4096 个并发 HTTP
   请求。
 

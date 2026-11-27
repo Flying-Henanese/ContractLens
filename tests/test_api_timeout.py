@@ -15,4 +15,4 @@ def test_document_route_maps_processing_timeout_to_gateway_timeout(monkeypatch):
     )
 
     assert response.status_code == 504
-    assert response.json()["detail"] == "文档处理超过 600 秒"
+    assert response.json()["detail"] == "文档处理超过 1200 秒"

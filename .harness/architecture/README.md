@@ -6,10 +6,10 @@
 两者各有 Python 依赖和运行职责，由根目录 Compose 作为一套服务管理。
 
 `POST /api/v1/documents/parse` 同步解析 PDF 或受支持的图像。上传暂存和初步校验完成后，
-路由以 `DOCUMENT_TIMEOUT_SECONDS` 为解析等待和 PaddleX 客户端超时配置，当前为 600 秒。
+路由以 `DOCUMENT_TIMEOUT_SECONDS` 为解析等待和 PaddleX 客户端超时配置，当前为 1200 秒。
 解析等待超时返回 HTTP 504。`PDF_PARSER_TIMEOUT_SECONDS` 配置独立 CLI 的默认单次请求超时
 （默认 120 秒，可由 `--timeout` 覆盖）。`POST /api/v1/receipts/recognize` 校验扩展名和
-Content-Type 后返回 HTTP 501，120 秒是预留配置。CLI 的 `parse` 命令处理 PDF。网关在
+Content-Type 后返回 HTTP 501，1200 秒是预留配置。CLI 的 `parse` 命令处理 PDF。网关在
 Compose 网络内通过 `http://paddleocr-vl-api:8080` 请求 PaddleX。
 
 PDF 的 HTTP 提交粒度由路由决定。`/api/v1/documents/parse` 和 CLI 采用逐页请求，
